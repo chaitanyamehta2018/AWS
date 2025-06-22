@@ -1,0 +1,1 @@
+This repository contains the automation way of handling the AWS APIs.
