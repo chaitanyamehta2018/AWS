@@ -1,0 +1,3 @@
+GroupName,Description,InboundPorts,OutboundPorts
+WebSG,Web security group,80;443;21;5060,ALL
+SSHSG,SSH only,22,ALL
