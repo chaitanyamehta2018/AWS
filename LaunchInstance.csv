@@ -1,0 +1,4 @@
+Name,ImageId,InstanceType,KeyName,SecurityGroup,AvailabilityZone
+AD_Server,ami-0c47b14fff9e56d8e,t2.micro,ATS_First_EC2_Key,VmSG,ap-south-1a
+Server1,ami-0c47b14fff9e56d8e,t2.micro,ATS_First_EC2_Key,VmSG,ap-south-1a
+Server2,ami-0c47b14fff9e56d8e,t2.micro,ATS_First_EC2_Key,VmSG,ap-south-1b
