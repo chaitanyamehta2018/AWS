@@ -2,25 +2,27 @@ import boto3
 import csv
 from botocore.exceptions import ClientError
 
-# Initialize EC2 client
-ec2 = boto3.client('ec2')
+REGION = 'ap-south-1'
+ec2 = boto3.client('ec2', region_name=REGION)
 
-# Get default VPC ID
-vpcs = ec2.describe_vpcs(Filters=[{'Name': 'isDefault', 'Values': ['true']}])
-default_vpc_id = vpcs['Vpcs'][0]['VpcId']
+def get_vpc_id_by_name(vpc_name):
+    response = ec2.describe_vpcs(
+        Filters=[{'Name': 'tag:Name', 'Values': [vpc_name]}]
+    )
+    vpcs = response['Vpcs']
+    if not vpcs:
+        raise Exception(f"❌ VPC with name '{vpc_name}' not found.")
+    return vpcs[0]['VpcId']
 
 def format_rules(ports):
     ports_clean = [p.strip().upper() for p in ports if p.strip()]
-    # Handle ALL traffic
     if 'ALL' in ports_clean:
         return [{
             'IpProtocol': '-1',
             'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
         }]
-
     rules = []
     for p in ports_clean:
-        # Numeric port -> TCP
         if p.isdigit():
             rules.append({
                 'IpProtocol': 'tcp',
@@ -28,28 +30,28 @@ def format_rules(ports):
                 'ToPort': int(p),
                 'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
             })
-        # Extend here for protocols like icmp, udp, or custom CIDRs
     return rules
 
 with open('security_groups.csv', newline='') as csvfile:
     reader = csv.DictReader(csvfile)
     for row in reader:
-        name = row['GroupName']
-        desc = row['Description']
+        name = row['GroupName'].strip()
+        desc = row['Description'].strip()
         in_p = row.get('InboundPorts', '').split(';')
         out_p = row.get('OutboundPorts', '').split(';')
+        vpc_name = row.get('VpcName', '').strip()
 
         try:
-            # Create security group
+            vpc_id = get_vpc_id_by_name(vpc_name)
             resp = ec2.create_security_group(
                 GroupName=name,
                 Description=desc,
-                VpcId=default_vpc_id
+                VpcId=vpc_id
             )
             sg_id = resp['GroupId']
-            print(f"✅ Created {name} ({sg_id})")
+            print(f"✅ Created {name} in {vpc_name} ({sg_id})")
 
-            # Remove default outbound rule if custom egress specified
+            # Revoke default outbound rule
             egress_rules = format_rules(out_p)
             if egress_rules:
                 try:
@@ -60,29 +62,28 @@ with open('security_groups.csv', newline='') as csvfile:
                             'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
                         }]
                     )
-                    print(f"  ↪ Revoked default outbound rule")
-                except ClientError as e:
-                    # Ignore if default rule was already removed
+                    print("  ↪ Revoked default outbound rule")
+                except ClientError:
                     pass
 
-            # Add ingress rules
+            # Inbound rules
             ingress = format_rules(in_p)
             if ingress:
                 ec2.authorize_security_group_ingress(
                     GroupId=sg_id,
                     IpPermissions=ingress
                 )
-                print(f"  ↪ Inbound rules set: {ingress}")
+                print(f"  ↪ Inbound rules: {ingress}")
 
-            # Add egress rules
+            # Outbound rules
             if egress_rules:
                 ec2.authorize_security_group_egress(
                     GroupId=sg_id,
                     IpPermissions=egress_rules
                 )
-                print(f"  ↪ Outbound rules set: {egress_rules}")
+                print(f"  ↪ Outbound rules: {egress_rules}")
 
         except ClientError as e:
             print(f"❌ Error processing {name}: {e.response['Error']['Message']}")
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
+            print(f"❌ Unexpected error for {name}: {e}")
