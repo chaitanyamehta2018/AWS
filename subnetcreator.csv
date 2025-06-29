@@ -1,0 +1,5 @@
+VpcName,Name,CIDR,AZ,Public
+MyVPC,Public-Subnet-1,192.168.0.0/26,ap-south-1a,True
+MyVPC,Public-Subnet-2,192.168.0.64/26,ap-south-1b,True
+MyVPC,Private-Subnet-1,192.168.0.128/26,ap-south-1a,False
+MyVPC,Private-Subnet-2,192.168.0.192/26,ap-south-1b,False
