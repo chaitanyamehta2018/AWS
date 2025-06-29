@@ -8,44 +8,47 @@ DEFAULTS = {
     'VpcCidrBlock': '10.0.0.0/16',
     'EnableDnsSupport': 'True',
     'EnableDnsHostnames': 'True',
-    'SubnetName': 'DefaultSubnet',
-    'SubnetCidrBlock': '10.0.1.0/24',
-    'AvailabilityZone': 'ap-south-1a',
-    'MapPublicIp': 'True',
-    'CreateIGW': 'True',
-    'CreateRoute': 'True',
-    'Region': 'ap-south-1'
+    'Region': 'ap-south-1',
+    'CreateIGW': 'False',
+    'CreateRoute': 'False'
 }
-
-def read_config(csv_file):
-    config = DEFAULTS.copy()
-    try:
-        with open(csv_file, newline='') as f:
-            reader = csv.DictReader(f)
-            row = next(reader, {})
-            for key in DEFAULTS:
-                if key in row and row[key].strip():
-                    config[key] = row[key].strip()
-    except Exception as e:
-        print(f"⚠️ Could not read CSV properly. Using defaults. Reason: {e}")
-    return config
 
 def str_to_bool(value):
     return str(value).strip().lower() in ['true', '1', 'yes']
 
-def create_vpc_resources(cfg):
-    print(f"\n🚀 Creating VPC in region {cfg['Region']}")
-    ec2 = boto3.client('ec2', region_name=cfg['Region'])
+def read_configs(csv_file):
+    configs = []
+    with open(csv_file, newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            cfg = DEFAULTS.copy()
+            cfg.update({k: v.strip() for k, v in row.items() if v.strip()})
+            configs.append(cfg)
+    return configs
 
-    # Create VPC
+def create_vpc(ec2, cfg):
     vpc = ec2.create_vpc(CidrBlock=cfg['VpcCidrBlock'])
     vpc_id = vpc['Vpc']['VpcId']
     ec2.create_tags(Resources=[vpc_id], Tags=[{'Key': 'Name', 'Value': cfg['VpcName']}])
     ec2.modify_vpc_attribute(VpcId=vpc_id, EnableDnsSupport={'Value': str_to_bool(cfg['EnableDnsSupport'])})
     ec2.modify_vpc_attribute(VpcId=vpc_id, EnableDnsHostnames={'Value': str_to_bool(cfg['EnableDnsHostnames'])})
     print(f"✅ Created VPC: {vpc_id} [{cfg['VpcName']}]")
+    return vpc_id
 
-    # Create Subnet
+def create_igw_and_rt(ec2, vpc_id):
+    igw_id = rt_id = None
+    igw = ec2.create_internet_gateway()
+    igw_id = igw['InternetGateway']['InternetGatewayId']
+    ec2.attach_internet_gateway(VpcId=vpc_id, InternetGatewayId=igw_id)
+    print(f"🌐 Attached IGW: {igw_id}")
+
+    rt = ec2.create_route_table(VpcId=vpc_id)
+    rt_id = rt['RouteTable']['RouteTableId']
+    ec2.create_route(RouteTableId=rt_id, DestinationCidrBlock='0.0.0.0/0', GatewayId=igw_id)
+    print(f"🛣️ Created Route Table: {rt_id}")
+    return igw_id, rt_id
+
+def create_subnet(ec2, cfg, vpc_id, rt_id):
     subnet = ec2.create_subnet(
         VpcId=vpc_id,
         CidrBlock=cfg['SubnetCidrBlock'],
@@ -54,36 +57,33 @@ def create_vpc_resources(cfg):
     subnet_id = subnet['Subnet']['SubnetId']
     ec2.create_tags(Resources=[subnet_id], Tags=[{'Key': 'Name', 'Value': cfg['SubnetName']}])
     ec2.modify_subnet_attribute(SubnetId=subnet_id, MapPublicIpOnLaunch={'Value': str_to_bool(cfg['MapPublicIp'])})
-    print(f"✅ Created Subnet: {subnet_id} [{cfg['SubnetName']}]")
+    print(f"📦 Created Subnet: {subnet_id} [{cfg['SubnetName']}]")
 
-    igw_id = None
-    rt_id = None
+    if rt_id and str_to_bool(cfg.get('CreateRoute', 'False')):
+        ec2.associate_route_table(RouteTableId=rt_id, SubnetId=subnet_id)
+        print(f"🔗 Associated subnet {subnet_id} to route table {rt_id}")
 
-    # Create IGW and Route Table if required
-    if str_to_bool(cfg['CreateIGW']):
-        igw = ec2.create_internet_gateway()
-        igw_id = igw['InternetGateway']['InternetGatewayId']
-        ec2.attach_internet_gateway(VpcId=vpc_id, InternetGatewayId=igw_id)
-        print(f"🌐 Attached Internet Gateway: {igw_id}")
+    return subnet_id
 
-        if str_to_bool(cfg['CreateRoute']):
-            rt = ec2.create_route_table(VpcId=vpc_id)
-            rt_id = rt['RouteTable']['RouteTableId']
-            ec2.create_route(RouteTableId=rt_id, DestinationCidrBlock='0.0.0.0/0', GatewayId=igw_id)
-            ec2.associate_route_table(RouteTableId=rt_id, SubnetId=subnet_id)
-            print(f"🛣️ Created and associated Route Table: {rt_id}")
+def main():
+    configs = read_configs(CSV_FILE)
+    if not configs:
+        print("⚠️ No valid configs found.")
+        return
 
-    return {
-        'VpcId': vpc_id,
-        'SubnetId': subnet_id,
-        'InternetGatewayId': igw_id or 'N/A',
-        'RouteTableId': rt_id or 'N/A'
-    }
+    region = configs[0]['Region']
+    ec2 = boto3.client('ec2', region_name=region)
+
+    vpc_id = create_vpc(ec2, configs[0])
+    igw_id = rt_id = None
+
+    if str_to_bool(configs[0].get('CreateIGW', 'False')):
+        igw_id, rt_id = create_igw_and_rt(ec2, vpc_id)
+
+    for cfg in configs:
+        create_subnet(ec2, cfg, vpc_id, rt_id)
+
+    print("\n✅ All resources created successfully.")
 
 if __name__ == '__main__':
-    config = read_config(CSV_FILE)
-    summary = create_vpc_resources(config)
-
-    print("\n📊 VPC Resource Summary:")
-    for k, v in summary.items():
-        print(f"{k}: {v}")
+    main()

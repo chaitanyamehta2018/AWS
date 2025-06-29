@@ -1,2 +1,5 @@
-VpcName,VpcCidrBlock,EnableDnsSupport,EnableDnsHostnames,SubnetName,SubnetCidrBlock,AvailabilityZone,MapPublicIp,CreateIGW,CreateRoute,Region
-MyCustomVPC,10.0.0.0/16,True,True,PublicSubnet1,10.0.1.0/24,ap-south-1a,True,True,True,ap-south-1
+VpcName,VpcCidrBlock,EnableDnsSupport,EnableDnsHostnames,Region,CreateIGW,CreateRoute,SubnetName,SubnetCidrBlock,AvailabilityZone,MapPublicIp
+MyVPC,192.168.0.0/24,TRUE,TRUE,ap-south-1,TRUE,TRUE,PublicSubnet1,192.168.0.0/26,ap-south-1a,TRUE
+,,,,,,,PublicSubnet2,192.168.0.64/26,ap-south-1b,TRUE
+,,,,,,,PrivateSubnet1,192.168.0.128/26,ap-south-1a,FALSE
+,,,,,,,PrivateSubnet2,192.168.0.192/26,ap-south-1b,FALSE
