@@ -1,0 +1,220 @@
+Step-by-Step Instructions
+✅ Step 1: Create Security Groups
+1.1 VmSG (for all EC2)
+Inbound: Allow All traffic (0.0.0.0/0) – for lab
+
+Outbound: All allowed (default)
+
+1.2 FSxSG (for FSx)
+Inbound: Allow All traffic from VmSG
+
+Outbound: All allowed
+
+✅ Step 2: Launch EC2 Windows Instances
+Repeat the below for each instance: AD-Server, Server-1, and Server-2
+
+For Each Instance:
+AMI: Windows Server 2019 Base
+
+Instance Type: t3.medium
+
+Subnet:
+
+AD-Server: ap-south-1a
+
+Server-1: ap-south-1a
+
+Server-2: ap-south-1b
+
+Security Group: VmSG
+
+Key Pair: Choose or create one (needed for RDP)
+
+Launch instance
+
+🛠️ Step 3: Change Administrator Password to Matrix@123
+Immediately after launching, for each instance:
+
+On your local system:
+RDP into each EC2 instance using the key pair
+
+Open Command Prompt or PowerShell as Administrator
+
+Run the following command:
+
+powershell
+Copy
+Edit
+net user Administrator Matrix@123
+💡 Optional: You can disable password complexity temporarily using:
+
+powershell
+Copy
+Edit
+secedit /export /cfg C:\secpol.cfg
+(notepad C:\secpol.cfg)  # Edit line: PasswordComplexity = 0
+secedit /configure /db %windir%\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
+⚠️ Use strong password policies in production.
+
+✅ Step 4: Configure Active Directory
+On AD-Server:
+
+		Part 1: Add Active Directory Domain Services (AD DS)
+		This installs the role but does not promote the server yet.
+
+		✅ Steps in Server Manager:
+		Open Server Manager (default after login on Windows Server)
+
+		Click "Manage" → "Add Roles and Features"
+
+		Wizard starts → Click Next on:
+
+		"Before You Begin"
+
+		"Installation Type" → Keep default: Role-based or feature-based
+
+		"Server Selection" → Keep default (local server)
+
+		On "Server Roles" page:
+
+		Scroll down and check ✅ Active Directory Domain Services
+
+		Click "Add Features" when prompted
+
+		Click Next
+
+		Click Next through Features and AD DS
+
+		On Confirmation page:
+
+		Click Install
+
+		Wait for installation to finish (no reboot required at this point)
+
+		🧩 Part 2: Promote Server to Domain Controller
+		This is where you create the domain: corp.example.com
+
+		✅ Steps to Promote:
+		After installation, you’ll see a yellow triangle warning in Server Manager (top-right).
+
+		Click "Promote this server to a domain controller"
+
+		Deployment Configuration:
+
+		Select: Add a new forest
+
+		Root domain name: corp.example.com
+
+		Click Next
+
+		Domain Controller Options:
+
+		Keep default: ✅ DNS server, ✅ Global Catalog
+
+		Enter DSRM password (e.g. Matrix@123)
+
+		Click Next
+
+		DNS Options:
+
+		It may show a warning about delegation — ignore and click Next
+
+		Additional Options:
+
+		NetBIOS name will auto-fill as CORP
+
+		Click Next
+
+		Paths: Keep default (for database, logs, SYSVOL) → Click Next
+
+		Review Options: Confirm everything is correct
+
+		Prerequisite Check: Wait for it to complete
+
+		Click Install
+
+		The server will automatically reboot after install
+
+✅ Step 5: Join Server-1 & Server-2 to Domain
+On each server:
+
+Set Preferred DNS to the private IP of AD-Server
+
+Join domain: corp.example.com
+
+Use domain admin credentials
+
+Reboot
+
+			Step-by-Step: Join Server-1 / Server-2 to Domain
+			🔧 1. Open System Properties
+			Press Windows + R → Type: sysdm.cpl → Hit Enter
+
+			This opens System Properties
+
+			🏷️ 2. Change Computer Name (optional)
+			Click Change...
+
+			If you want, rename the computer (e.g. Server-1)
+
+			Select: ✅ Domain
+
+			Enter domain name:
+
+			Copy
+			Edit
+			corp.example.com
+			🔑 3. Enter Domain Admin Credentials
+			When prompted, enter:
+
+			Field	Value
+			Username	Administrator
+			Password	Matrix@123
+
+✅ Step 6: Create Amazon FSx (Windows File Server)
+Go to Amazon FSx → Create File System
+
+Choose: Windows File Server
+
+VPC: Default VPC
+
+Subnets: Use 2 from ap-south-1a and ap-south-1b
+
+AD Domain: corp.example.com
+
+Credentials: AD domain admin (created on AD-Server)
+
+Security Group: FSxSG
+
+Launch
+
+✅ Step 7: Map FSx Share
+On Server-1 & Server-2:
+
+powershell
+Copy
+Edit
+net use Z: \\<fsx-dns>\share /user:corp\Administrator Matrix@123
+Or via File Explorer: Map Network Drive → Enter FSx path
+
+
+✅ To verify from the AD-Server whether Server-1 and Server-2 have successfully joined the domain corp.example.com, you can do this using the Active Directory Users and Computers (ADUC) console or PowerShell.
+		Using GUI (ADUC)
+		On the AD-Server,
+
+		Start → Server Manager → Tools → Active Directory Users and Computers
+		In the left pane, expand:corp.example.com → Computers
+		You should see Server-1, Server-2 and Amazon FSx listed as objects (computer accounts).
+
+		🧠 If you renamed them before joining, they’ll appear by that name.
+
+
+
+
+✅ Lab Setup Complete!
+You now have:
+	Windows EC2s with known passwords
+	Working AD domain
+	FSx joined to AD
+
+Servers accessing shared storage
