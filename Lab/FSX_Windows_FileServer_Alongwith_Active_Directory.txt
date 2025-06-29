@@ -1,60 +1,60 @@
 Step-by-Step Instructions
 ✅ Step 1: Create Security Groups
-1.1 VmSG (for all EC2)
-Inbound: Allow All traffic (0.0.0.0/0) – for lab
+	1.1 VmSG (for all EC2)
+	Inbound: Allow All traffic (0.0.0.0/0) – for lab
 
-Outbound: All allowed (default)
+	Outbound: All allowed (default)
 
-1.2 FSxSG (for FSx)
-Inbound: Allow All traffic from VmSG
+	1.2 FSxSG (for FSx)
+	Inbound: Allow All traffic from VmSG
 
-Outbound: All allowed
+	Outbound: All allowed
 
 ✅ Step 2: Launch EC2 Windows Instances
-Repeat the below for each instance: AD-Server, Server-1, and Server-2
+	Repeat the below for each instance: AD-Server, Server-1, and Server-2
 
-For Each Instance:
-AMI: Windows Server 2019 Base
+	For Each Instance:
+	AMI: Windows Server 2019 Base
 
-Instance Type: t3.medium
+	Instance Type: t3.medium
 
-Subnet:
+	Subnet:
 
-AD-Server: ap-south-1a
+	AD-Server: ap-south-1a
 
-Server-1: ap-south-1a
+	Server-1: ap-south-1a
 
-Server-2: ap-south-1b
+	Server-2: ap-south-1b
 
-Security Group: VmSG
+	Security Group: VmSG
 
-Key Pair: Choose or create one (needed for RDP)
+	Key Pair: Choose or create one (needed for RDP)
 
-Launch instance
+	Launch instance 
 
-🛠️ Step 3: Change Administrator Password to Matrix@123
-Immediately after launching, for each instance:
+✅ Step 3: Change Administrator Password to Matrix@123
+		Immediately after launching, for each instance:
 
-On your local system:
-RDP into each EC2 instance using the key pair
+		On your local system:
+		RDP into each EC2 instance using the key pair
 
-Open Command Prompt or PowerShell as Administrator
+		Open Command Prompt or PowerShell as Administrator
 
-Run the following command:
+		Run the following command:
 
-powershell
-Copy
-Edit
-net user Administrator Matrix@123
-💡 Optional: You can disable password complexity temporarily using:
+		powershell
+		Copy
+		Edit
+		net user Administrator Matrix@123
+		💡 Optional: You can disable password complexity temporarily using:
 
-powershell
-Copy
-Edit
-secedit /export /cfg C:\secpol.cfg
-(notepad C:\secpol.cfg)  # Edit line: PasswordComplexity = 0
-secedit /configure /db %windir%\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
-⚠️ Use strong password policies in production.
+		powershell
+		Copy
+		Edit
+		secedit /export /cfg C:\secpol.cfg
+		(notepad C:\secpol.cfg)  # Edit line: PasswordComplexity = 0
+		secedit /configure /db %windir%\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
+		
 
 ✅ Step 4: Configure Active Directory
 On AD-Server:
@@ -136,66 +136,63 @@ On AD-Server:
 		The server will automatically reboot after install
 
 ✅ Step 5: Join Server-1 & Server-2 to Domain
-On each server:
+	On each server:
 
-Set Preferred DNS to the private IP of AD-Server
+	Set Preferred DNS to the private IP of AD-Server
 
-Join domain: corp.example.com
+	Join domain: corp.example.com
 
-Use domain admin credentials
+	Use domain admin credentials
 
-Reboot
+	Reboot
 
-			Step-by-Step: Join Server-1 / Server-2 to Domain
-			🔧 1. Open System Properties
-			Press Windows + R → Type: sysdm.cpl → Hit Enter
+				Step-by-Step: Join Server-1 / Server-2 to Domain
+				🔧 1. Open System Properties
+				Press Windows + R → Type: sysdm.cpl → Hit Enter
 
-			This opens System Properties
+				This opens System Properties
 
-			🏷️ 2. Change Computer Name (optional)
-			Click Change...
+				🏷️ 2. Change Computer Name (optional)
+				Click Change...
 
-			If you want, rename the computer (e.g. Server-1)
+				If you want, rename the computer (e.g. Server-1)
 
-			Select: ✅ Domain
+				Select: ✅ Domain
 
-			Enter domain name:
+				Enter domain name:
 
-			Copy
-			Edit
-			corp.example.com
-			🔑 3. Enter Domain Admin Credentials
-			When prompted, enter:
+				Copy
+				Edit
+				corp.example.com
+				🔑 3. Enter Domain Admin Credentials
+				When prompted, enter:
 
-			Field	Value
-			Username	Administrator
-			Password	Matrix@123
+				Field	Value
+				Username	Administrator
+				Password	Matrix@123
 
 ✅ Step 6: Create Amazon FSx (Windows File Server)
-Go to Amazon FSx → Create File System
+	Go to Amazon FSx → Create File System
 
-Choose: Windows File Server
+	Choose: Windows File Server
 
-VPC: Default VPC
+	VPC: Default VPC
 
-Subnets: Use 2 from ap-south-1a and ap-south-1b
+	Subnets: Use 2 from ap-south-1a and ap-south-1b
 
-AD Domain: corp.example.com
+	AD Domain: corp.example.com
 
-Credentials: AD domain admin (created on AD-Server)
+	Credentials: AD domain admin (created on AD-Server)
 
-Security Group: FSxSG
+	Security Group: FSxSG
 
-Launch
+	Launch
+	It will take almost 15 minutes to get created.
 
 ✅ Step 7: Map FSx Share
-On Server-1 & Server-2:
-
-powershell
-Copy
-Edit
-net use Z: \\<fsx-dns>\share /user:corp\Administrator Matrix@123
-Or via File Explorer: Map Network Drive → Enter FSx path
+	On Server-1 & Server-2: Enter the follwing command from cmd prompt.
+	net use Z: \\<fsx-dns>\share /user:corp\Administrator Matrix@123 (Latest you will get when you click on the "Attach" option at File system on aws console).
+	
 
 
 ✅ To verify from the AD-Server whether Server-1 and Server-2 have successfully joined the domain corp.example.com, you can do this using the Active Directory Users and Computers (ADUC) console or PowerShell.
@@ -212,9 +209,9 @@ Or via File Explorer: Map Network Drive → Enter FSx path
 
 
 ✅ Lab Setup Complete!
-You now have:
-	Windows EC2s with known passwords
-	Working AD domain
-	FSx joined to AD
+	You now have:
+		- Windows EC2s with known passwords
+		- Working AD domain
+		- FSx joined to AD
 
 Servers accessing shared storage
