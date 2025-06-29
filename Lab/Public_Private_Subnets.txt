@@ -1,0 +1,77 @@
+✅Step:1 Create the VPC
+	Go to VPC Console → Create VPC
+	Select "VPC and more"
+	Enter:
+	Name: MyVPC
+	IPv4 CIDR: 192.168.0.0/24
+	Leave IPv6 as None
+	Keep Tenancy: Default
+	Click Create VPC
+	
+✅Step:2 Create Subnets
+	Create 4 subnets (2 Public, 2 Private)
+	🔷 Public Subnet - 1 (AZ: ap-south-1a)
+		Name: Public-Subnet-1
+		CIDR: 192.168.0.0/26
+		AZ: ap-south-1a
+	🔷 Public Subnet - 2 (AZ: ap-south-1b)
+		Name: Public-Subnet-2
+		CIDR: 192.168.0.64/26
+		AZ: ap-south-1b
+	🔷 Private Subnet - 1 (AZ: ap-south-1a)
+		Name: Private-Subnet-1
+		CIDR: 192.168.0.128/26
+		AZ: ap-south-1a
+	🔷 Private Subnet - 2 (AZ: ap-south-1b)
+		Name: Private-Subnet-2
+		CIDR: 192.168.0.192/26
+		AZ: ap-south-1b
+		
+✅Step:3 Create and Attach Internet Gateway
+	VPC → Internet Gateways → Create
+	Name: MyIGW
+	Attach it to MyVPC
+	
+✅Step:4 Create Route Table for Public Subnets
+	Route Tables → Create
+	Name: Public-RT
+	VPC: MyVPC
+	Add Route:
+	Destination: 0.0.0.0/0
+	Target: Internet Gateway (select MyIGW)
+	Associate this route table with:
+	Public-Subnet-1
+	Public-Subnet-2
+
+✅Step:5	 Create Security Groups
+	WebSG (For Web Servers)
+	Allow HTTP (80) and RDP (3389) or SSH (22) from your IP
+
+	DB SG (For MySQL DB)
+	Allow MySQL (3306) from Web SG only (i.e., using SG ID as source)
+
+✅Step:6	Launch EC2 Instances
+	Web Server 1
+	Subnet: Public-Subnet-1
+	Security Group: Web SG
+	Name: Web-Server-1
+	
+	Web Server 2
+	Subnet: Public-Subnet-2
+	Security Group: Web SG
+	Name: Web-Server-2
+
+	MySQL DB 1
+	Subnet: Private-Subnet-1
+	Security Group: DB SG
+	Name: MySQL-DB-1
+
+	MySQL DB 2
+	Subnet: Private-Subnet-2
+	Security Group: DB SG
+	Name: MySQL-DB-2	
+
+✅Step:6 Testing
+	Web servers should be accessible via public IP or DNS
+	MySQL should be reachable from the web servers only, not from the internet
+	
