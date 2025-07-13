@@ -1,0 +1,119 @@
+🔧 PART 1: Create VPCs and Subnets
+1. Service Consumer VPC (192.168.0.0/24)
+Subnets:
+
+GWLBE Subnet: 192.168.0.0/25
+
+App Subnet: 192.168.0.128/25
+
+2. Service Provider VPC (192.168.1.0/24)
+Subnet:
+
+Firewall Subnet: 192.168.1.0/24
+
+🚀 PART 2: Deploy Security Appliances (Your AMI)
+Steps to Launch (repeat for 2 instances):
+Go to AWS Console (ensure Mumbai region ap-south-1 is selected).
+
+Navigate to EC2 → Launch Instance
+
+Under AMI, click “Browse more AMIs”
+
+Paste your AMI ID: ami-0afe2e9532012d300 and click Select
+
+Choose instance type: t2.micro (or as required)
+
+Set network:
+
+VPC: Service Provider VPC (192.168.1.0/24)
+
+Subnet: Firewall Subnet (192.168.1.0/24)
+
+Assign a public IP
+
+Choose/create a Key Pair
+
+Configure security group:
+
+Inbound:
+
+Allow UDP 6081 (GENEVE)
+
+SSH (22)
+
+Any other required custom ports (ICMP, HTTP, etc.)
+
+Launch instance
+
+Repeat to launch second instance
+
+✅ Name the instances: Security Appliance-1, Security Appliance-2
+
+📦 PART 3: Gateway Load Balancer in Provider VPC
+Create a Target Group (type: Instance or IP) and add both appliances
+
+Create a Gateway Load Balancer:
+
+Use the above Target Group
+
+Listener protocol: GENEVE (UDP 6081)
+
+📍 PART 4: Create Gateway Load Balancer Endpoint (GWLBE)
+Go to VPC > Endpoints > Create Endpoint
+
+Type: Gateway Load Balancer Endpoint
+
+VPC: Service Consumer VPC
+
+Subnet: 192.168.0.0/25 (GWLBE Subnet)
+
+Service: Choose the shared GWLB service from Provider VPC (via PrivateLink or cross-VPC share)
+
+💻 PART 5: Launch App Servers
+Launch two EC2 instances:
+
+VPC: Service Consumer VPC
+
+Subnet: App Subnet 192.168.0.128/25
+
+Public IP: Yes
+
+Name: Server-1, Server-2
+
+🗺 PART 6: Configure Route Tables
+App Subnet RT
+192.168.0.0/24 → local
+
+0.0.0.0/0 → GWLBE
+
+GWLBE Subnet RT
+192.168.0.0/24 → local
+
+0.0.0.0/0 → IGW
+
+Firewall Subnet RT
+192.168.1.0/24 → local
+
+0.0.0.0/0 → IGW
+
+🔐 PART 7: Security Groups
+App Servers:
+
+Allow SSH, ICMP, HTTP
+
+Appliances:
+
+Allow GENEVE (UDP 6081)
+
+SSH
+
+GWLBE endpoint security group (if required): allow traffic from App Subnet
+
+🧪 PART 8: Validation
+SSH into Server-1 or Server-2
+
+Try outbound access (e.g., ping, curl)
+
+Inspect traffic logs on the security appliances
+
+Ensure packets pass through GWLB → Appliance
