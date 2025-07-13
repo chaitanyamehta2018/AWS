@@ -57,11 +57,34 @@ SSH into each appliance instance and run the following:
 	Add both EC2 appliance instances
 
 🔁 6. Create Gateway Load Balancer Endpoint (GWLBE)
+	🔹 6A. Create an Endpoint Service (in Service Provider VPC)
+		Go to VPC > Endpoint Services
+		Click Create Endpoint Service
+		Under Name, give a name like:gwlb-endpoint-service
+			 Associate with a load balancer
+			 Choose your Gateway Load Balancer
+			 Acceptance required: ❌ (disable) for testing
+			 Click Create
+			 Note: Wait ~1–2 minutes for the service to show as "Available"
+			 copy the servie name in a separate notepad for e.g.: com.amazonaws.vpce.ap-south-1.vpce-svc-051557d9ea52252c2
+			 
+	🔹 6B. Create Gateway Load Balancer Endpoint (GWLBE) (in Service Consumer VPC)
+		Go to VPC > Endpoints > Create Endpoint
+		Service Category: Select "Other endpoint services"
+		Paste your Endpoint Service name (from step 6A) OR search for it
+		VPC: Choose Service Consumer VPC
+		Subnets: Select the GWLBE Subnet (192.168.0.0/25)
+		Security group: Pick one that allows traffic as needed
+		Click Create endpoint		
+		
+"""		
 	Go to VPC > Endpoints > Create Endpoint
 	Select Type: Gateway Load Balancer
 	Service: Choose the GWLB shared from Service Provider VPC
 	VPC: Service Consumer VPC
 	Subnet: GWLBE Subnet (192.168.0.0/25)
+"""
+
 
 💻 7. Launch App EC2 Instances (in Service Consumer VPC)
 	Repeat the following steps for Server-1 and Server-2:
@@ -82,6 +105,34 @@ SSH into each appliance instance and run the following:
 		echo "<h1>Local IP: $LOCAL_IP</h1>" > /var/www/html/index.html
 
 🗺 8. Configure Route Tables
+	🔹 1. GWLBE Subnet Route Table
+			📍 VPC: Service Consumer VPC
+
+			Destination	Target
+			192.168.0.0/24	Local
+			0.0.0.0/0	Internet Gateway (IGW-Consumer)
+
+			📝 This allows the GWLBE to reach the internet (if needed) and stay routable within its VPC.
+	
+	🔹 2. App Subnet Route Table
+			📍 VPC: Service Consumer VPC
+
+			Destination	Target
+			192.168.0.0/24	Local
+			0.0.0.0/0	GWLBE ID (the Gateway Load Balancer Endpoint)
+
+			📝 This is the key route to steer ALL outbound traffic from the App EC2s through the security appliances.
+	
+	🔹 3. Firewall Subnet Route Table
+			📍 VPC: Service Provider VPC
+
+			Destination	Target
+			192.168.1.0/24	Local
+			0.0.0.0/0	Internet Gateway (IGW-Provider)
+
+			📝 Ensures security appliances can download packages, resolve domains, and handle return traffic.
+
+
 	🔹 GWLBE Subnet Route Table
 	192.168.0.0/24 → Local
 	0.0.0.0/0 → Internet Gateway
