@@ -1,0 +1,65 @@
+from flask import Flask, render_template, jsonify
+from flask_cors import CORS
+import psutil
+import subprocess
+import os
+
+app = Flask(__name__, template_folder='/home/ec2-user/templates')
+CORS(app)
+
+TARGET_LOAD_FILE = "/home/ec2-user/target_load.txt"
+stress_process = None
+
+def get_target_load():
+    if os.path.exists(TARGET_LOAD_FILE):
+        with open(TARGET_LOAD_FILE, 'r') as f:
+            return int(f.read())
+    else:
+        return 0
+
+def set_target_load(value):
+    with open(TARGET_LOAD_FILE, 'w') as f:
+        f.write(str(value))
+
+def apply_load(load_percent):
+    global stress_process
+    subprocess.run(['pkill', '-f', 'stress-ng'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if load_percent > 0:
+        # Apply load to 1 core only
+        stress_process = subprocess.Popen(['stress-ng', '--cpu', '1', '--cpu-load', str(load_percent), '--timeout', '0'])
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/cpu_percentage')
+def cpu_percentage():
+    usage = psutil.cpu_percent(interval=1)
+    target = get_target_load()
+    return jsonify(cpu=usage, target=target)
+
+@app.route('/increase_load')
+def increase_load():
+    current = get_target_load()
+    new_load = min(100, current + 5)
+    set_target_load(new_load)
+    apply_load(new_load)
+    return jsonify(status='Increased', target=new_load)
+
+@app.route('/decrease_load')
+def decrease_load():
+    current = get_target_load()
+    new_load = max(0, current - 5)
+    set_target_load(new_load)
+    apply_load(new_load)
+    return jsonify(status='Decreased', target=new_load)
+
+@app.route('/reset_load')
+def reset_load():
+    set_target_load(0)
+    apply_load(0)
+    return jsonify(status='Reset', target=0)
+
+if __name__ == "__main__":
+    set_target_load(0)
+    app.run(host='0.0.0.0', port=8080)
