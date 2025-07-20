@@ -5,6 +5,36 @@ REGION = 'ap-south-1'
 ec2 = boto3.resource('ec2', region_name=REGION)
 client = boto3.client('ec2', region_name=REGION)
 elbv2 = boto3.client('elbv2', region_name=REGION)
+autoscaling = boto3.client('autoscaling', region_name=REGION)
+
+def delete_auto_scaling_groups():
+    print("🔸 Deleting Auto Scaling Groups...")
+    asgs = autoscaling.describe_auto_scaling_groups()['AutoScalingGroups']
+    for asg in asgs:
+        try:
+            autoscaling.update_auto_scaling_group(
+                AutoScalingGroupName=asg['AutoScalingGroupName'],
+                MinSize=0,
+                MaxSize=0,
+                DesiredCapacity=0
+            )
+            autoscaling.delete_auto_scaling_group(
+                AutoScalingGroupName=asg['AutoScalingGroupName'],
+                ForceDelete=True
+            )
+            print(f"Deleted Auto Scaling Group: {asg['AutoScalingGroupName']}")
+        except Exception as e:
+            print(f"Error deleting ASG {asg['AutoScalingGroupName']}: {e}")
+
+def delete_launch_templates():
+    print("🔸 Deleting Launch Templates...")
+    templates = client.describe_launch_templates()['LaunchTemplates']
+    for lt in templates:
+        try:
+            client.delete_launch_template(LaunchTemplateId=lt['LaunchTemplateId'])
+            print(f"Deleted Launch Template: {lt['LaunchTemplateName']}")
+        except Exception as e:
+            print(f"Error deleting Launch Template {lt['LaunchTemplateName']}: {e}")
 
 def delete_ec2_instances():
     print("🔸 Terminating EC2 instances...")
@@ -34,7 +64,7 @@ def release_eips():
                 client.release_address(AllocationId=eip['AllocationId'])
                 print(f"Released EIP: {eip['AllocationId']}")
             except Exception as e:
-                print(f"Error releasing EIP: {eip['AllocationId']}: {e}")
+                print(f"Error releasing EIP {eip['AllocationId']}: {e}")
 
 def delete_target_groups():
     print("🔸 Deleting Target Groups...")
@@ -55,7 +85,7 @@ def delete_load_balancers():
             print(f"Deleted LB: {lb['LoadBalancerArn']}")
         except Exception as e:
             print(f"Error deleting LB {lb['LoadBalancerArn']}: {e}")
-    time.sleep(10)  # Allow deletion to complete
+    time.sleep(10)
 
 def delete_vpc_endpoints():
     print("🔸 Deleting VPC Endpoints...")
@@ -105,10 +135,8 @@ def delete_vpcs():
         vpc_id = vpc['VpcId']
         if vpc.get('IsDefault'):
             continue
-
         print(f"Processing VPC: {vpc_id}")
 
-        # Detach & delete IGW
         igws = client.describe_internet_gateways(Filters=[{'Name': 'attachment.vpc-id', 'Values': [vpc_id]}])['InternetGateways']
         for igw in igws:
             try:
@@ -118,7 +146,6 @@ def delete_vpcs():
             except Exception as e:
                 print(f"Error deleting IGW {igw['InternetGatewayId']}: {e}")
 
-        # Delete subnets
         subnets = client.describe_subnets(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])['Subnets']
         for subnet in subnets:
             try:
@@ -127,7 +154,6 @@ def delete_vpcs():
             except Exception as e:
                 print(f"Error deleting Subnet {subnet['SubnetId']}: {e}")
 
-        # Delete route tables (not main)
         rts = client.describe_route_tables(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])['RouteTables']
         for rt in rts:
             main = any(assoc.get('Main') for assoc in rt.get('Associations', []))
@@ -138,7 +164,6 @@ def delete_vpcs():
                 except Exception as e:
                     print(f"Error deleting RT {rt['RouteTableId']}: {e}")
 
-        # Finally delete the VPC
         try:
             client.delete_vpc(VpcId=vpc_id)
             print(f"Deleted VPC: {vpc_id}")
@@ -146,6 +171,8 @@ def delete_vpcs():
             print(f"Error deleting VPC {vpc_id}: {e}")
 
 def main():
+    delete_auto_scaling_groups()
+    delete_launch_templates()
     delete_ec2_instances()
     delete_nat_gateways()
     release_eips()
