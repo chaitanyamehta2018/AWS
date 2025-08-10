@@ -1,3 +1,6 @@
+Precondition: This lab is to be created using the root account instead of Admin account.
+========================================================================================
+
 1. Create the S3 bucket
 	Go to S3 in the AWS console.
 	Click Create bucket.
@@ -107,5 +110,9 @@
 			]
 		}
 		
-5. For both the user1 and user2 attached the created policy: access-point-user-access-policy
+5. For both the user1 and user2 attached the created policy: access-point-user-access-policy.
 
+6. Test & validation steps:
+	Verify that User1 can upload only to app1 via Access Point 1
+	Verify that User2 can upload only to app2 via Access Point 2
+	Cross-access attempts fail.
