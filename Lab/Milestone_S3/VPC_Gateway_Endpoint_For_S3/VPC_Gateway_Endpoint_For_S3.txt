@@ -1,0 +1,69 @@
+Lab: Validate S3 VPC Gateway Endpoint Using Traceroute
+Step 1 – Create S3 Bucket
+	Go to AWS Console → S3 → Create bucket
+	Name: herrypotterbucket01
+	Region: ap-south-1 (Mumbai)
+	Keep defaults (Block all public access ✅)
+	Upload a test file, e.g., test.txt.
+Step 2 – Launch EC2 Instance
+	Launch in the same region as the bucket.
+	Place it in a private subnet (no public IP).
+	Use Amazon Linux 2 AMI.
+	Ensure you can SSH into it from a bastion host (public subnet).
+Step 3 – Get Bucket Hostname
+	S3 bucket hostname format:
+	<bucket-name>.s3.<region>.amazonaws.com
+	example here...
+	herrypotterbucket01.s3.ap-south-1.amazonaws.com
+Step 4 – Test Traceroute Without Endpoint
+	traceroute herrypotterbucket01.s3.ap-south-1.amazonaws.com
+	✅ You will see multiple hops (via AWS’s internet routing or NAT Gateway).
+		 1  244.5.0.29 (...)
+		 2  100.65.20.96 (...)
+		 ...
+		 8  s3-r-w.ap-south-1.amazonaws.com (...)
+Step 5 – Create VPC Gateway Endpoint for S3
+	Go to VPC → Endpoints → Create endpoint.
+	Service category: AWS services.
+	Service name: com.amazonaws.ap-south-1.s3 (Type: Gateway).
+	Select your VPC.
+	Select the private route table for your private subnet.
+	Policy: Full Access (default).
+	Create.
+
+Step 6 – Test Traceroute With Endpoint
+	Run again:
+	traceroute herrypotterbucket01.s3.ap-south-1.amazonaws.com
+	✅ You should now see:
+	 1  * * *
+	 2  * * *
+	 ...
+	The * * * means the traffic is going through AWS’s private VPC endpoint path, not over the public internet, so traceroute cannot show intermediate hops.
+
+Step 7 – (Optional) Restrict S3 Access Only via Endpoint
+	Use the following json
+		{
+		  "Version": "2012-10-17",
+		  "Statement": [
+			{
+			  "Effect": "Allow",
+			  "Principal": "*",
+			  "Action": "s3:*",
+			  "Resource": [
+				"arn:aws:s3:::herrypotterbucket01",
+				"arn:aws:s3:::herrypotterbucket01/*"
+			  ],
+			  "Condition": {
+				"StringEquals": {
+				  "aws:SourceVpce": "vpce-xxxxxxxxxxxxxxxxx"
+				}
+			  }
+			}
+		  ]
+		}
+		Replace vpce-xxxxxxxxxxxxxxxxx with your actual endpoint ID.
+
+Step 8 –Cleanup
+	Delete endpoint.
+	Terminate EC2.
+	Delete bucket.
