@@ -1,0 +1,116 @@
+Lab: AWS Global Accelerator with Multi-Region Web Servers (Private Subnets + NAT Gateways)
+🛠 Prerequisites
+AWS account with administrator access
+Key pairs created in both ap-south-1 (Mumbai) and us-east-1 (N. Virginia)
+Basic knowledge of VPC, EC2, Load Balancers, and AWS Global Accelerator
+
+1. Create VPCs in Both Regions
+	In ap-south-1 (Mumbai)
+		Go to VPC → Create VPC
+		Name: India-VPC
+		IPv4 CIDR: 192.168.100.0/24
+		Tenancy: Default
+		Create Subnets:
+		Public_Subnet_1A → CIDR: 192.168.100.0/26, AZ: ap-south-1a
+		Public_Subnet_1B → CIDR: 192.168.100.64/26, AZ: ap-south-1b
+		Private_Subnet_1A → CIDR: 192.168.100.128/26, AZ: ap-south-1a
+		Private_Subnet_1B → CIDR: 192.168.100.192/26, AZ: ap-south-1b
+
+	In us-east-1 (N. Virginia)
+		VPC name: USA-VPC
+		CIDR: 192.168.200.0/24
+		Create Subnets:
+		Public_Subnet_1A → CIDR: 192.168.200.0/26, AZ: us-east-1a
+		Public_Subnet_1B → CIDR: 192.168.200.64/26, AZ: us-east-1b
+		Private_Subnet_1A → CIDR: 192.168.200.128/26, AZ: us-east-1a
+		Private_Subnet_1B → CIDR: 192.168.200.192/26, AZ: us-east-1b
+
+2. Create Internet Gateway (IGW)
+	For each region:
+	VPC → Internet Gateways → Create Internet Gateway
+	Name: India-IGW / USA-IGW
+	Attach IGW to the respective VPC.
+3. Create Public Route Table
+	For each region:
+	Create Public Route Table:
+	Name: India-Public-RT / USA-Public-RT
+	VPC: respective VPC
+	Add route:
+	Destination: 0.0.0.0/0
+	Target: Internet Gateway
+	Associate both public subnets with this public route table.
+
+4. Create NAT Gateway
+	For each region:
+	Elastic IPs → Allocate Elastic IP.
+	VPC → NAT Gateways → Create NAT Gateway:
+	Name: India-NAT / USA-NAT
+	Subnet: choose Public_Subnet_1A
+	Elastic IP: choose the allocated EIP
+	Wait until Status = Available.
+
+5. Create Private Route Table
+	For each region:
+	Create Private Route Table:
+	Name: India-Private-RT / USA-Private-RT
+	VPC: respective VPC
+	Add route:
+	Destination: 0.0.0.0/0
+	Target: NAT Gateway
+
+   Associate both private subnets with this private route table.
+
+6. Launch EC2 Web Servers in Private Subnets
+In ap-south-1 (Mumbai):
+	EC2 → Launch Instance:
+	Name: Web-Server-1-India
+	AMI: Amazon Linux 2
+	Type: t2.micro
+	Subnet: Private_Subnet_1A
+	Security Group: allow inbound HTTP (80) from ALB SG, and SSH (22) from bastion or your IP
+	Repeat for:
+	Web-Server-2-India in Private_Subnet_1B
+
+	After launch, connect (via bastion or Session Manager) and run:
+		sudo yum update -y
+		sudo yum install -y httpd
+		echo "Hello from India Server-1" | sudo tee /var/www/html/index.html
+		sudo systemctl enable --now httpd
+In us-east-1 (N. Virginia):
+	Same process, message changed to "Hello from USA Server".
+
+7. Create Application Load Balancers
+For India:
+	EC2 → Load Balancers → Create Application Load Balancer:
+	Name: India-ALB
+	Scheme: Internet-facing
+	Network: India-VPC
+	Subnets: Public_Subnet_1A and Public_Subnet_1B
+	Security Group: allow inbound HTTP (80) from 0.0.0.0/0
+	Target Group:
+	Name: India-TG
+	Type: Instance
+	Targets: select both India private web servers
+	Attach target group to ALB.
+For USA:
+	Same steps, ALB name: USA-ALB, TG name: USA-TG.
+
+8. Create AWS Global Accelerator
+	AWS Global Accelerator → Create Accelerator:
+	Name: Global-Accelerator-Lab
+	Listener:
+	Protocol: TCP
+	Port: 80
+	Endpoint Groups:
+	Region: ap-south-1 → Endpoint: India-ALB
+	Region: us-east-1 → Endpoint: USA-ALB
+	Create and wait until status is Deployed.
+
+9. Test
+	In private servers, run:
+	curl http://amazon.com
+(Should work via NAT Gateway)
+
+Access the Global Accelerator DNS name in browser — it should route to nearest region’s ALB.
+
+Test with VPN to different countries to confirm routing changes.

@@ -1,0 +1,140 @@
+RDS Super Lab – Detailed Manual Steps
+Mission
+	Explore Amazon RDS features for:
+	High Availability (Multi-AZ)
+	Scalability (Read Replicas)
+	Disaster Recovery (Replica promotion)
+
+Step 1: Configure a Multi-AZ Deployment
+
+	Go to AWS RDS Console → Create database.
+	Method: Standard create.
+	Engine: MySQL.
+	Template: Production.
+	Availability & durability: Multi-AZ DB instance.
+	DB identifier: MyDB.
+	Master username: admin.
+	Master password: Indian123.
+	Instance class: db.t3.micro.
+	Storage:
+	General Purpose SSD (gp3)
+	Allocated: 20 GB
+	Disable autoscaling.
+	Click Create database.
+
+Step 2: Create EC2 Instance (Web Server)
+
+	Go to EC2 Console → Launch instance.
+	Name: Web-Server.
+	AMI: Amazon Linux 2023.
+	Type: t2.micro.
+	Key pair: new or existing.
+	Security group:
+	Allow SSH (22) from 0.0.0.0/0.
+	Allow HTTP (80) from Internet.
+	Launch the instance.
+
+Step 3: Connect RDS from EC2
+	SSH into EC2:
+	sudo -i
+	Install MySQL client:
+	sudo dnf update -y
+	sudo dnf install mariadb105
+	Get RDS endpoint from RDS Console → Connectivity & security.
+
+	Connect:
+	mysql -h <rds-endpoint> -u admin -p
+	Password: Indian123
+	
+Step 4: Create Database & Table
+	In MySQL:
+	CREATE DATABASE myDatabase;
+	USE myDatabase;
+	CREATE TABLE guestbook (
+		id INT NOT NULL PRIMARY KEY AUTO_INCREMENT,
+		name VARCHAR(255) NOT NULL,
+		message TEXT NOT NULL
+	);
+	CREATE USER 'dbadmin'@'%' IDENTIFIED BY 'Indian@123';
+	GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, REFERENCES,
+	INDEX, EXECUTE, TRIGGER ON myDatabase.* TO 'dbadmin'@'%';
+
+
+	Exit MySQL: exit; .
+
+Step 5: Configure EC2 as PHP Web Server
+	Install PHP:
+
+	sudo dnf install php8.1
+	sudo dnf install php8.1-mysqlnd.x86_64
+	Start PHP-FPM:
+		systemctl start php-fpm
+		systemctl enable php-fpm
+		systemctl status php-fpm
+	Start Apache:
+		systemctl start httpd
+		systemctl enable httpd
+		systemctl status httpd
+
+Step 6: Configure & Access Web Page
+	Go to web root:
+
+	cd /var/www/html
+
+
+	Create dbtest.php:
+		<?php
+		$servername = "<RDS End Point>";
+		$username = "dbadmin";
+		$password = "Indian@123";
+		$database = "myDatabase";
+		$pdo = new PDO("mysql:host=$servername;dbname=$database", $username, $password);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		?>
+
+	Create index.php with insert & search form (guestbook).
+
+	Open in browser:
+		http://<EC2 Public IP>
+		→ Add/Search records .
+
+Step 7: Test Multi-AZ Failover
+
+	In RDS Console → Select DB → Actions → Reboot with failover.
+	Keep adding records on webpage during failover → confirm HA (no disruption).
+
+Step 8: Create a Read Replica
+	In RDS Console → Select DB → Actions → Create read replica.
+	Settings:
+	Identifier: mydb-read-replica
+	Class: db.t3.micro
+	Storage: gp3, 20 GB
+	Availability: Single instance
+	Launch
+
+Step 9: Update Application for Read Queries
+	On EC2, go to:
+	cd /var/www/html
+	Replace index.php with new version that:
+	Uses $pdoWrite for writes (primary DB).
+	Uses $pdoRead for reads (replica).
+
+Step 10: Verify Read Replicas
+	Open webpage.
+	Add/Search records repeatedly.
+	In RDS Console → Replica → Monitoring, check:
+	Replica lag
+	ReadIOPS.
+
+Step 11: Manual Failover of Read Replica
+	Delete Primary DB instance:
+	Disable deletion protection if enabled.
+	Delete instance.
+	Promote replica:
+	Select read replica.
+	Stop replication (if needed).
+	Actions → Promote.
+	Set backup retention, define backup window.
+	Promote and wait.
+
+	Update app connection string to new primary endpoint.
