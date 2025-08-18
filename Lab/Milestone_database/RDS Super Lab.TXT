@@ -1,9 +1,16 @@
 RDS Super Lab – Detailed Manual Steps
+=====================================
 Mission
 	Explore Amazon RDS features for:
 	High Availability (Multi-AZ)
 	Scalability (Read Replicas)
 	Disaster Recovery (Replica promotion)
+	
+Additonal files for this lab:
+	../php_content_without_read_replica/dbtest.php
+	../php_content_without_read_replica/index.php
+	../php_content_with_read_replica/dbtest.php
+	../php_content_with_read_replica/index.php
 
 Step 1: Configure a Multi-AZ Deployment
 
@@ -78,9 +85,7 @@ Step 5: Configure EC2 as PHP Web Server
 
 Step 6: Configure & Access Web Page
 	Go to web root:
-
-	cd /var/www/html
-
+		cd /var/www/html
 
 	Create dbtest.php:
 		<?php
@@ -99,7 +104,24 @@ Step 6: Configure & Access Web Page
 		→ Add/Search records .
 
 Step 7: Test Multi-AZ Failover
+	
+	First read the database from the EC2 command line:
+	
+	mysql -h <rds-endpoint> -u admin -p
+	USE myDatabase;
+	SELECT * FROM guestbook;
+	
+		It should display like following.
+		MySQL [myDatabase]> SELECT * FROM guestbook;
+			+----+---------+------------------+
+			| id | name    | message          |
+			+----+---------+------------------+
+			|  1 | Harilal | Kem chho Harilal |
+			|  2 | Ramlal  | Kem chho Ramlal  |
+			+----+---------+------------------+
+			2 rows in set (0.001 sec)
 
+	Now check the High availability.
 	In RDS Console → Select DB → Actions → Reboot with failover.
 	Keep adding records on webpage during failover → confirm HA (no disruption).
 
@@ -138,3 +160,27 @@ Step 11: Manual Failover of Read Replica
 	Promote and wait.
 
 	Update app connection string to new primary endpoint.
+	
+Step 12: Clean up
+	When the lab is complete, remove all resources to avoid unwanted AWS charges:
+	Delete Read Replica (if still running):
+		Go to RDS Console → Databases.
+		Select the read replica (e.g., mydb-read-replica).
+		Actions → Delete → Confirm (choose “Skip final snapshot” to avoid storage costs).
+	Delete Primary Multi-AZ DB instance:
+		Select the primary DB (e.g., MyDB).
+		Ensure deletion protection is disabled:
+		Actions → Modify → Uncheck Deletion protection → Apply immediately.
+		Actions → Delete → Confirm (skip final snapshot unless you need a backup).
+	Terminate EC2 Web Server:
+		Go to EC2 Console → Instances.
+		Select Web-Server instance.
+		Actions → Terminate → Confirm.
+	Remove associated Security Groups (optional but recommended):
+		Delete the EC2-SG-Web and RDS-SG security groups created for the lab (if not used elsewhere).
+	Double-check:
+		In EC2 Console, confirm no running instances.
+		In RDS Console, confirm no DB instances.
+		In VPC Console, confirm no unused security groups remain.
+
+✅ At this point, all resources are cleaned up.
