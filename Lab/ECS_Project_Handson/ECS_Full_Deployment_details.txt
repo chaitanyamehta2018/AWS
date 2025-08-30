@@ -1,0 +1,961 @@
+🚀 Project Mission
+Deploy a Scalable PHP Web Application Using Amazon ECS
+
+🧭 Objective
+1. To deploy a PHP-based web application that simulates a production-ready workload
+2. The application will run on Amazon ECS using both Fargate and EC2 launch types
+3. It will be exposed to the internet through an Application Load Balancer (ALB)
+4. The app will support image uploads, which will be stored in Amazon S3
+5. The container image for the app will be built using Docker and stored in Amazon ECR
+6. The deployment process will follow AWS best practices, including proper IAM roles and environment configuration
+7. This project reflects a real-world cloud deployment scenario, similar to what is used in modern production environments
+
+Learners will understand how to:
+1. Containerize a web application
+2. Push Docker images to ECR
+3. Run tasks and services in ECS
+4. Attach load balancers
+5. Scale the application
+6. Handle network and IAM configurations
+
+🛠 Implementation Plan
+
+✅ Step 1: Create ECS Cluster
+
+	🎯 Goal
+	Create a single ECS cluster that supports both Fargate (serverless containers) and EC2, so we can:
+	- Practice and compare both launch types
+	- Unlock all ECS Task Definition configuration options
+	- Deploy App to either Fargate or EC2
+
+	🪜 Steps
+	1. Go to the ECS Console
+	   Click “Clusters” → “Create Cluster”
+
+	🧩 Section 1: Cluster Configuration
+	- Cluster name: cloudfolks-ecs-cluster
+
+	🏗 Section 2: Infrastructure
+	- Option 1: AWS Fargate (Serverless)
+	  📌 Just keep Fargate enabled (checked). No other config needed
+	- Option 2: Amazon EC2 Instances
+	  1. Auto Scaling group (ASG): Create new ASG
+	  2. Provisioning model: On-demand
+	  3. Container instance Amazon Machine Image (AMI): Use default: Amazon ECS-Optimized Amazon Linux 2023
+	  4. Instance type: t2.micro (Free tier)
+	  5. EC2 instance role: Create new role
+	  6. Desired capacity: 1
+		 - Minimum: 1
+		 - Maximum: 2
+	  7. SSH Key pair: Select your existing key or Create new
+	  8. Root EBS volume size: 30 GB
+
+	🌐 Section 3: Network Settings for Amazon EC2 Instances
+	- VPC: Choose the default VPC already selected
+	- Subnets:
+	  1. Just keep the default selected subnet as-is
+	  2. ✅ No need to create or modify subnets
+	- 📝 Note:
+	  1. If you're deploying in Mumbai (ap-south-1) region
+	  2. 🔴 Sometimes, t2.micro (free tier) instances are not available in ap-south-1c
+	  3. ✅ To avoid instance launch failures in the future: Deselect the ap-south-1c subnet
+	- Security group:
+	  1. Select: Create a new security group
+	  2. Name: cloudfolks-ecs-sg
+	  3. 🔓 Inbound Rules to Add:
+		 - Type SSH: From 0.0.0.0/0
+		 - Custom TCP 8080: From 0.0.0.0
+	- Auto-assign public IP: Use subnet Setting
+
+	Create
+
+✅ Step 2: Create Docker Image from Code
+
+	🎯 Goal
+	🔍 What are we doing in this step?
+	1. Launch a new Docker-enabled EC2 instance
+	2. Clone the PHP S3 App from the CloudFolks public GitHub repo
+	3. Install Composer (once)
+	4. Build the Docker image using the provided Dockerfile
+
+	Why This Step Is Needed ❓
+	1. ECS cannot build images — it only runs them
+	2. So we need to build the image on a separate EC2 machine
+	3. Once the image is built and tested, we will push it to ECR for ECS to use
+
+	✅ Step 2.1: Create Docker Image
+
+	✅ 1. Launch a Docker EC2 Instance
+	1. 🔹 AWS Console → EC2 → Launch Instance
+	2. AMI: Amazon Linux 2023
+	3. Instance Name: Build-Machine
+	4. Instance Type: t2.micro
+	5. Key Pair (login): Create or select an existing key
+	6. Network Settings: Allow SSH (port 22) and HTTP (port 8080)
+	7. Leave all other settings default
+	8. ✅ Click Launch Instance
+
+	✅ 2. Connect to EC2
+	ssh -i "your-key.pem" ec2-user@<your-ec2-public-ip>
+
+	✅ 3. Install Docker
+	sudo dnf update -y 
+	sudo dnf install docker -y 
+	sudo systemctl enable docker 
+	sudo systemctl start docker 
+	sudo usermod -aG docker ec2-user 
+	newgrp docker
+
+	✅ 4. Install PHP & Composer
+	sudo dnf install php-cli unzip git -y 
+	php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" 
+	php composer-setup.php 
+	sudo mv composer.phar /usr/local/bin/composer
+
+	- sudo dnf install php-cli unzip git -y
+	  1. Installs PHP CLI (to run PHP commands)
+	  2. unzip (for extracting files)
+	  3. and git (for cloning repositories)
+	  4. -y automatically answers “yes” to all prompts
+	- php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+	  1. Downloads the official Composer installer script
+	  2. Why Composer?
+		 - As part of our project, we are building a PHP-based web application where images uploaded by users will be stored in an Amazon S3 bucket
+		 - To interact with S3 from PHP, we are using the official AWS SDK aws/aws-sdk-php
+		 - This SDK is not built-in to PHP — it's a third-party library
+		 - So, to use it in our project, we must install it using Composer, which is the standard dependency manager for PHP
+	- php composer-setup.php: Executes the installer to generate composer.phar (the Composer binary)
+	- sudo mv composer.phar /usr/local/bin/composer: Moves Composer to a global path so we can use the composer command anywhere in the system
+
+	✅ 5. Clone the App from GitHub
+	git clone https://github.com/CloudFolksPublic/php-s3-app.git 
+	cd php-s3-app
+
+	✅ 6. Install Dependencies (AWS SDK)
+	1. sudo dnf install php-simplexml -y
+	   - simplexml is a built-in PHP extension (but not always pre-installed).
+	   - It allows PHP to read and parse XML data easily
+	   - AWS SDK uses XML responses under the hood, especially when communicating with certain AWS services
+	2. composer install: Installs all PHP libraries listed in your project's composer.lock file (based on composer.json)
+
+	✅ 7. Build Docker Image
+	docker build -t cloudfolks-php-app .
+
+	✅ Verification
+	1. docker images
+	2. If you are getting cloudfolks-php-app: Image is ✅ ready
+
+	✅ Step 2.2: Test Image Using Variables
+	docker run -d -p 8080:80 \ 
+	 -e S3_BUCKET=<S3_BUCKET_NAME> \ 
+	 -e AWS_REGION=<AWS_REGION> \ 
+	 -e AWS_ACCESS_KEY_ID=<AWS_ACCESS_KEY_ID> \ 
+	 -e AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY> \ 
+	 --name php-test cloudfolks-php-app
+
+	- <S3_BUCKET_NAME>: Your actual S3 bucket name
+	- <AWS_REGION>: e.g., ap-south-1, us-east-1
+	- <AWS_ACCESS_KEY_ID>: Your AWS Access Key ID
+	- <AWS_SECRET_ACCESS_KEY>: Your AWS Secret Access Key
+
+	🔁 Replace <S3_BUCKET_NAME> with your actual bucket name when running the command
+
+✅ Step 3: Understand Amazon ECR & Create ECR Repository
+
+	✅ Step 3.1 Understand Amazon ECR
+
+	Introduction
+	1. Amazon ECR (Elastic Container Registry) is a fully managed container image registry provided by AWS
+	2. Think of it like:
+	   - Docker Hub: Public container image repo
+	   - Amazon ECR: Private (secure) image repo in AWS, for your own infrastructure
+
+	Why do we need Amazon ECR?
+	1. ✅ ECS (Elastic Container Service) cannot build Docker images: ECS can only run pre-built images, and it pulls them from a registry
+	2. ✅ Security & Access Control:
+	   - ECR images are private by default
+	   - Only your AWS services (like ECS) can pull from them using IAM roles
+	3. ✅ Faster Performance (Region-local): Images are stored inside your AWS region, reducing latency
+	4. ✅ Docker Hub Rate Limits Avoided: Docker Hub may limit pulls; ECR doesn’t for AWS services
+
+	🧠 Use Case of ECS and our Project
+	1. In Step 2.1, we created a Docker image of our PHP application on an EC2 instance
+	2. Now we want to deploy this application using ECS (Elastic Container Service)
+	3. But here's the challenge: 🔒 We can't directly copy or drag the Docker image from EC2 to ECS
+	4. ECS doesn’t pull images from EC2
+	5. It pulls images from a container registry
+	6. That’s where Amazon ECR (Elastic Container Registry) comes in
+
+	How to use ECR?
+	1. Create a private ECR repository in our AWS account
+	2. Push the Docker image from our EC2 to ECR
+	3. When we create an ECS Task Definition, we will pull the image from ECR
+
+	✅ Step 3.2 Create ECR Repository
+	1. Go to the Amazon ECR Console:
+	2. Click “Create Repository”
+	3. This is the name of your Docker image repo: cloudfolks-php-app
+	4. Image Tag Mutability:
+	   - Controls whether you can overwrite existing tags
+	   - ✅ Mutable (default): You can push again using same tag (e.g., latest)
+	   - ❌ Immutable: Once you push a tag (like v1.0), it can’t be overwritten
+	   - ✅ For training & dev: Choose Mutable
+	   - 🔒 For production: Use Immutable to prevent accidental overwrites
+	   - ✅ Select Mutable for this project
+	5. Encryption Configuration:
+	   - Controls how image layers are encrypted in ECR
+	   - ✅ AES-256 (default): Uses ECR-managed encryption
+	   - 🔐 AWS KMS: Uses your own KMS key for extra security (not needed for training)
+	   - ✅ Select: AES-256 (default) — simple and secure for this project
+
+	Create
+
+✅ Step 4: Push Docker Image to Amazon ECR
+
+	To push images from the build machine to an ECR Repository, you need to follow these 2 steps:
+	1. Setup Authentication
+	2. Tag and Push the Image
+
+	✅ Step 4.1 Setup Authentication
+
+	Authenticate the EC2 (Build Machine) with AWS
+	🔹 Why This Step?
+	To push Docker images to ECR, the EC2 instance must be authorized to use ECR commands via AWS CLI
+
+	🔁 Two Authentication Options
+	1. 🔑 Option 1: Use Access Key and Secret Key (Quick setup, but less secure)
+	2. 🔐 Option 2: Use IAM Role (✅ Best Practice)
+
+	Use IAM Role Attached to EC2 (Best Practice)
+	1. Create IAM Role
+	   - Go to IAM Console → Roles → Create Role
+	   - Select AWS Service → Use Case: EC2
+	   - Attach Policy: AmazonEC2ContainerRegistryFullAccess
+	   - Name the role: ECRAccessRole
+	   - Create the role ✅
+	2. Attach it to your EC2 instance
+	   - EC2 Console → Select instance
+	   - Actions → Security → Modify IAM Role
+	   - Attach ECRAccessRole
+
+	Authenticate Docker with Amazon ECR
+	🎯 Why This Step?
+	1. Your Docker client on EC2 needs permission to push/pull images from your private ECR registry
+	2. To do this, we generate a temporary login token using the AWS CLI and pass it to Docker
+
+	🪜 Where to Get the Command
+	1. Go to the ECR Console
+	2. Click on your repository: cloudfolks-php-app
+	3. On the top right, click “View push commands”
+	4. The first command shown is:
+	   aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin <your-account-id>.dkr.ecr.ap-south-1.amazonaws.com
+	   ✅ This is the command to authenticate Docker with ECR
+
+	Now Paste the Full Command in EC2
+	✅ After running it, you should see: Login Succeeded
+
+	✅ Step 4.2 Tag and Push the Image
+
+	Build your Docker image
+	1. In “View push commands”, ECR gives this second command: docker build -t cloudfolks-php-app .
+	2. But we already ran this earlier in your EC2 build machine — so we can skip this
+	3. ✅ Instead, Just Confirm That the Image Exists
+	   - On your EC2 instance, run: docker images
+	4. Expected output: cloudfolks-php-app
+	5. ✅ If the image is listed — you can now skip the build step and move straight to next
+
+	➡ Tag the image and push to ECR
+	🎯 Why Tagging?
+	1. The image you built is named cloudfolks-php-app locally.
+	2. But before you push it to ECR, you must tag it using the ECR repository URI — so Docker knows where to push it
+	3. 🧾 ECR Repository URI Format: <account-id>.dkr.ecr.<region>.amazonaws.com/<repository-name>
+
+	Tag the image
+	1. Look for the command under 🟨 "Step 3: Tag your image so you can push it to this repository"
+	2. 🧾 Copy the Command (Looks Like This):
+	   docker tag cloudfolks-php-app:latest 123456789012.dkr.ecr.ap-south-1.amazonaws.com/cloudfolks-php-app
+	3. 🖥 Paste This Command in Your EC2 Terminal
+	   ✅ This will tag your locally built image with your ECR repository URI, preparing it for push
+	4. ✅ Verification
+	   - docker images
+	   - ✅ You should see two entries for the same image ID:
+		 1. cloudfolks-php-app
+		 2. 123456789012.dkr.ecr.ap-south-1.amazonaws.com/cloudfolks-php-app
+
+	Push the Docker Image to Amazon ECR
+	🎯 Why This Step?
+	Now that your Docker image is tagged with the ECR repository URI, it's ready to be uploaded (pushed) to Amazon ECR so that ECS can use it during deployment
+
+	Push Image
+	1. Look for the command under 🟨 Step 4 "Run the following command to push this image to your newly created AWS repository"
+	2. 🧾 Copy the Command (Looks Like This):
+	   docker push 123456789012.dkr.ecr.ap-south-1.amazonaws.com/cloudfolks-php-app
+	3. 🖥 Paste This in Your EC2 Terminal
+
+	✅ Verification
+	1. After the push completes, go back to the ECR Console
+	2. Click your repository
+	3. You’ll see:
+	   - The image listed
+	   - The tag (e.g., latest)
+	   - Image digest
+	   - Size and push time
+	5. 🎉 Your image is now live in Amazon ECR!
+
+✅ Step 5: Understand ECS Task Definition
+
+✅ Step 5.1: Understand ECS Task Definition
+
+Introduction
+1. In Amazon ECS, a Task Definition is a detailed set of instructions that tells ECS how to prepare and run your container-based application
+2. You define everything needed to run your app — such as:
+   - Which Docker image to use
+   - How much memory and CPU to allocate
+   - Which ports to open, and any environment variables or storage required
+3. Task Definition means writing all the setup rules and configurations that ECS will follow whenever you want to create a task or a service to run an application
+
+🧾 What does a Task Definition include?
+1. Launch type: AWS Fargate, Amazon EC2 instances
+2. OS, Architecture, Network mode
+3. Task size: CPU, Memory
+4. Task roles
+5. Task placement
+6. Image
+7. Port mappings
+8. Resource allocation limits
+9. Environment variables
+10. Storage
+
+📌 Important Notes
+1. You can create multiple revisions of a task definition. Each time you update the configuration, a new version (revision) is created
+2. Task Definition is required whether you're running on Fargate or EC2 launch type
+3. One Task Definition can have multiple containers, like frontend + backend in the same task
+
+✅ Step 5.2 Task definition family & Launch type
+
+Task definition family
+1. This field allows you to assign a family name, which groups all versions of a task definition together
+2. It's useful for version control and managing updates
+3. ✅ Example:
+   - Let's say you are running an app called cloudfolks-web-app
+   - Your first task definition might be:
+     - Family: cloudfolks-web-app
+     - Revision: 1
+   - Later, you make changes (like increase CPU), and register a new version:
+     - Family: cloudfolks-web-app
+     - Revision: 2
+   - ECS will store both revisions under the same family and use the latest one unless specified
+
+Launch Type
+1. Launch Type means – where and how your ECS tasks will run
+2. It tells ECS whether to run your containers on:
+   - Fargate → AWS-managed servers (no need to manage EC2)
+   - EC2 → Your own EC2 instances (you manage servers)
+3. ✅ Why This Option is Important?
+   - This option tells ECS which type of infrastructure your task is designed for
+   - If you choose FARGATE, ECS knows your task will run on serverless infrastructure, so it will expect only supported options (like awsvpc network mode)
+   - If you choose EC2, ECS allows more flexibility (like custom volumes, different network modes)
+   - So, this setting controls what ECS features you can use in the rest of the task definition
+4. 📝 Note:
+   - You do not select the final Launch Type here
+   - That happens later, when you:
+     1. Run a task manually
+     2. Or create a service in a cluster
+   - At that time, ECS will allow only the launch types you selected under “Requires compatibilities.”
+
+✅ Step 5.3: Operating system/Architecture
+
+1. When you define a Task Definition in ECS, you must tell:
+   - ✅ Which operating system your task (container) is built for: Linux or Windows
+   - ✅ Which CPU architecture your task needs: x86_64 or ARM64
+2. This tells ECS: ➡ “My container is made for this type of system. Please run it on a compatible machine.”
+3. 🚫 Misunderstanding to Avoid:
+   - You are not selecting EC2 instance OS or hardware here
+   - You are telling ECS: “Please run my task on an EC2 or Fargate host that matches this.”
+4. ✅ How ECS Uses This Info:
+   - Once you set the OS and Architecture in the Task Definition
+   - Linux + x86_64: EC2 (x86-based) or Fargate
+   - Linux + ARM64: EC2 (Graviton) or Fargate
+   - Windows + x86_64: EC2 (Windows AMI, x86)
+   - If ECS can’t find a compatible host, the task will fail to start
+5. ⚠ Real Example:
+   - You selected:
+     1. Linux + ARM64 in Task Definition
+     2. But your EC2 container instance is x86_64
+   - 👉 In this case, ECS will NOT schedule the task on that instance It will wait or fail, because there’s a mismatch
+   - ✅ Solution: You must register an ARM64 EC2 instance (like AWS Graviton) in your ECS cluster
+6. 📝 Final Summary:
+   - You are telling ECS what kind of machine your task needs,
+   - and ECS will look for a matching EC2 or Fargate host
+   - If there is no matching host, the task will not run.
+
+✅ Step 5.4: Network mode
+
+1. Network Mode in ECS Task Definition decides how your container will connect to the network — and whether it shares networking with the host machine, or gets its own IP
+2. It directly affects:
+   - How your container communicates with the outside world
+   - Which ports you can expose
+   - Whether your container shares network settings with other containers
+3. ✅ Available Network Modes:
+
+awsvpc
+1. Each task gets its own ENI (Elastic Network Interface) and private IP in your VPC
+2. Supports:
+   - ✅ Fargate
+   - ✅ EC2
+3. 📌 Most Common: awsvpc
+   - When using Fargate, awsvpc is the only supported network mode
+   - Each task behaves like a mini-EC2 — it gets:
+     1. Its own private IP
+     2. Full access to VPC features (security groups, routing, etc.)
+   - Even with EC2 launch type, awsvpc is often preferred for better isolation
+
+bridge
+1. In awsvpc mode, each task gets its own ENI and private IP from your VPC, providing full network isolation, just like an EC2 instance
+2. In bridge mode, the task shares the container host’s ENI & IP Address, and uses port mapping to connect—no separate ENI or private IP is assigned
+3. Supports: ✅ EC2 only
+4. How bridge Mode works?
+   - ECS runs your task on an EC2 instance (container host), which has a single ENI attached from the VPC
+   - Unlike awsvpc mode, bridge mode shares the EC2 instance’s ENI with all tasks—no separate ENI is assigned
+   - To make this possible, Docker creates a virtual bridge (docker0) on the EC2 host, which acts as a gateway(172.17.0.1) and assigns internal IPs to containers
+   - The bridge (docker0) is connected to the EC2 instance’s ENI, so all incoming and outgoing traffic from tasks flows through this single ENI, with Docker using NAT to handle IP translation between the bridge and ENI
+   - When a task starts, Docker creates a virtual Ethernet pair—one end connects to the task, the other to the bridge
+   - The task gets an internal IP (e.g., 172.17.0.2) from the bridge, not from the VPC
+   - Since the task has no VPC IP, ECS uses port mapping (e.g., 8080→80). Accessing 172.16.10.10:8080 forwards traffic to the task’s internal IP 172.17.0.2:80
+
+Default
+1. In Amazon ECS, the default network mode depends on the operating system of the Docker host
+2. If your ECS task runs on a Linux server, it uses bridge mode by default
+3. But if it runs on a Windows server, it uses NAT mode, because Windows does not support bridge mode
+4. Supports:
+   - ✅ EC2 only
+   - Windows container host
+
+host
+1. In host network mode, container does not use separate Docker network
+2. It uses same network as the system where it is running. So both use same IP address
+3. Because of this, if one container is using a port, another container cannot use the same port. If both try to use same port, error will come
+4. Supports: ✅ EC2 Linux only
+
+none
+No external networking. Mostly used for testing or special use cases. ✅ EC2 only
+
+⚠ How Network Mode Affects Task Definition
+- awsvpc
+  - Port Mapping Needed? ❌ Not needed (you define container port directly)
+  - IP Type: Own private IP
+- bridge
+  - Port Mapping Needed? ✅ Yes (container port → host port mapping)
+  - IP Type: Shares host
+- host
+  - Port Mapping Needed? ❌ No mapping — uses host ports directly
+  - IP Type: Shares host
+
+✅ Step 5.5: Task size
+
+1. Task Size means how much CPU and Memory (RAM) your ECS task needs to run
+2. It defines the resources ECS will allocate for your task to work properly.
+3. ✅ Task Size Rules:
+   - Fargate: You must select from fixed CPU+Memory combinations (e.g., 0.5 vCPU + 1 GB)
+   - EC2: You can use any size, depending on how much free resource your EC2 host has
+   - Think of it like: How powerful does the machine need to be for my app?
+4. ⚠ Important Points:
+   - If your task needs more CPU or memory, ECS will not run it unless enough resources are available
+   - In Fargate, Task Size also affects cost — you are billed based on vCPU + RAM
+
+✅ Step 5.6: Task roles - conditional
+
+1. In Amazon ECS, Task Roles and Task Execution Roles are special IAM roles attached to a task definition that define the permissions required for running and operating ECS tasks
+
+Task Role VS Task Execution Role
+
+Task Role
+1. Who uses it? Application containers running inside the ECS task
+2. Purpose: Gives application code permissions to access AWS services at runtime
+3. Attached to: ECS Task Definition → Task Role ARN
+4. Used when: During runtime while the containerized app runs and makes AWS API calls
+5. Common permissions: S3 (GetObject, PutObject), DynamoDB (Read/Write), SQS (SendMessage), Secrets Manager (GetSecretValue
+6. Credentials type: Temporary credentials injected inside the container
+7. Example use case: App needs to read/write files in an S3 bucket
+8. When it is NOT needed: If the app doesn’t access any AWS services
+9. Security scope: Scoped to the application inside the task
+
+Task Execution Role
+1. Who uses it? ECS agent (the infrastructure layer that starts and manages tasks)
+2. Purpose: Gives ECS agent permissions to pull images, push logs, and fetch secrets during task startup
+3. Attached to: ECS Task Definition → Task Execution Role ARN
+4. Used when: During task launch/startup before the app runs
+5. Common permissions: ECR (GetAuthorizationToken, GetDownloadUrlForLayer), CloudWatch Logs (CreateLogStream, PutLogEvents), Secrets Manager (GetSecretValue)
+6. Credentials type: Temporary credentials used by ECS agent outside the container
+7. Example use case: ECS needs to pull image from ECR and push container logs to CloudWatch
+8. When it is NOT needed: If using a public Docker image and no CloudWatch logs or secrets
+9. Security scope: Scoped to ECS infrastructure tasks (image pulling, logging)
+
+✅ Step 5.7: Placement Constraint
+
+Introduction
+1. Task Placement Constraint controls on which container host your task will run inside the ECS cluster
+2. Example:
+   - You want your task to run only on t3 instances
+   - You are running two tasks and you want both tasks to run on different container hosts
+3. Notes:
+   - Placement constraints are not supported on Fargate
+   - If no matching EC2 instance is found, the task will stay in the PENDING state
+4. There are two types of placement constraints in ECS:
+   - memberOf
+   - distinctInstance
+
+memberOf vs distinctInstance
+
+memberOf
+1. Purpose: Run task only on EC2 instances matching a custom rule (CQL)
+2. Cluster Query Language(CQL) Expression Required: ✅ Yes
+3. Where to Configure: Task Definition, Service, Run Task
+4. Example: attribute:ecs.instance-type =~ t3.* → Runs only on t3 instances
+
+distinctInstance
+1. Purpose: Ensure each task runs on a different EC2 instance
+2. Cluster Query Language(CQL) Expression Required: ❌ No
+3. Where to Configure: Service, Run Task (not in Task Definition)
+4. Example: No expression → ECS spreads tasks across separate EC2 hosts
+
+✅ Step 5.8: Container Configuration
+
+Part - 1
+
+Name
+Name of the container inside the task definition
+
+Image URI
+1. Location of the Docker image to run
+2. You can pull images from:
+   - Docker Hub
+   - Amazon ECR
+   - Azure Container Registry
+   - Google Artifact Registry
+3. These images can be either public or private repositories
+
+Essential Container
+1. The main or critical container in a task that must keep running for the task to work.
+2. If an essential container fails or stops, the entire task will stop
+3. By default, the first container is essential, but you can set any or multiple containers as essential
+4. If you have multiple containers marked as essential and any one of them goes down, the entire task will fail.
+
+Private registry authentication
+1. If you pull an image from a public registry (Docker Hub public image,), no authentication is needed
+2. When pulling from a private ECR repo, ECS automatically authenticates using the Task Execution Role
+3. For private images outside AWS, you must provide authentication credentials
+4. ECS does not allow you to enter username/password directly in the task definition
+5. You must store the credentials in AWS Secrets Manager and then provide the Secrets Manager ARN in the Private Registry Authentication section of the task definition
+
+Port Mappings
+1. Port mappings define how the port inside your container connects to the port on the host or ENI
+2. awsvpc Mode: You only need to define Container Port
+3. bridge Mode: You define both Container Port and Host Port
+4. Default Mode (Windows Only): Works like bridge mode, you define both Container Port and Host Port
+5. host Mode: You only need to define Container Port
+6. none Mode: Port mappings are not used because the container has no external access
+
+Read-only root file system
+1. This option controls whether the container’s root filesystem is set to read-only.
+2. When enabled, the container can only read from / and cannot modify system files
+3. This setting does not apply to Windows containers; it’s only for Linux-based containers
+
+Part - 2
+Resource allocation limits - conditional
+
+1. In ECS, you can control how much CPU and memory your application can use
+2. 👉 These resource allocation limits can be set at two levels:
+   - Task Level (Task Size)
+   - Container Level
+
+Task Level (Task Size) Step 5.5
+1. This is the total CPU and memory available for the whole task
+2. Think of it like a big box where all containers inside must fit.
+3. For Fargate, Task Size is mandatory. You must define CPU and memory at the task level
+4. For EC2, it’s optional. If you set it, ECS reserves that much CPU and memory on the EC2 host for the task
+
+Container Level
+1. Here, we define CPU and memory for each container inside the task
+2. It helps control how much of the task’s resources a single container can use
+3. You can use 4 settings:
+   - cpu → CPU units for the container
+     Example: 0.25 vCPU, 0.5 vCPU, 1 vCPU
+   - Memory hard limit
+     1. Container is killed if it crosses this
+     2. Example: 0.25 GB (256), 0.5 GB (512), 1 GB
+   - Memory soft limit
+     1. Reservation ECS tries to keep at least this much free for the container
+     2. Example: 0.25 GB (256), 0.5 GB (512), 1 GB
+   - GPU
+     1. It defines how many physical GPUs your container can use
+     2. GPUs are used for:
+        - AI/ML workloads
+        - Image/video processing, and rendering.
+     3. GPU is always set per container, not at the task level
+     4. The GPU field in the ECS console is greyed out by default and becomes available only when these conditions are met:
+        - Launch Type: Task must be EC2 (GPU not supported in Fargate)
+        - Instance Type: ECS cluster must have GPU-enabled EC2 instances (e.g., p2, p3, g4, g5
+        - AMI: You must use an ECS-Optimized GPU AMI or custom AMI with NVIDIA drivers
+        - Task Definition: Cannot mix Fargate and EC2 compatibilities; GPU works only with EC2
+
+✅ Step 5.9: Environment variables
+
+🌟 What are Environment Variables?
+1. Environment variables are small key-value pairs (like KEY=VALUE) that you pass to your container at runtime
+2. They work like configuration values your app needs without changing the code
+
+🔑 Why are they used?
+1. ✅ To avoid hardcoding values (like passwords, database URLs) inside the code
+2. ✅ To use different values for Dev, Test, Prod without changing the app
+3. ✅ To keep secrets and configuration outside the code.
+
+✅ Step 5.10: Storage
+
+Fargate Launch Type
+
+Ephemeral Storage
+1. What is it?
+   - In Fargate, each task gets a single shared ephemeral storage volume (20 GiB by default, upgradable to 200 GiB), regardless of how many containers are running in the task
+   - This storage is used internally by ECS to store container image layers, and is not accessible to your containers by default
+2. Persistent? ❌ No
+
+Bind Mount (Ephemeral)
+1. What is it?
+   - By default, containers in the same Fargate task cannot share data using ephemeral storage
+   - If you want to enable data sharing between containers using ephemeral storage, you must define a named volume and bind mount it into each container
+2. Persistent? ❌ No
+3. Shared Across Tasks? ❌ No
+4. Can Share Data Between Containers in Same Task? ✅ Yes
+5. Mount Required? ✅ Yes
+
+Amazon EBS
+1. What is it?
+   - Block-level storage device attached per task
+   - Can be used for high-performance temporary or persistent storage depending on task type
+   - For Fargate Amazon EBS is supported via CLI, SDKs, or JSON only — not available in ECS console UI
+2. Persistent?
+   - Can be persisted when attached to a standalone task
+   - Ephemeral when attached to a task maintained by a service.
+3. Shared Across Tasks? ❌ No
+4. Can Share Data Between Containers in Same Task? ✅ Yes
+5. Mount Required? ✅ Yes
+
+Amazon EFS
+1. What is it? Managed network file system for persistent data shared across multiple tasks or containers
+2. Persistent? ✅ Yes
+3. Shared Across Tasks? ✅ Yes
+4. Can Share Data Between Containers in Same Task? ✅ Yes (if mounted in all containers)
+5. Mount Required? ✅ Yes
+
+🔎 Important Clarification
+❌ Fargate does not support Docker volumes or FSx for Windows
+
+EC2 Launch Type
+
+EC2 Instance Storage
+1. What is it? Local disks physically attached to the EC2 instance
+2. Persistent? ❌ No
+
+Bind Mount (Host Path)
+1. What is it? Mount a specific directory or file system from the EC2 instance storage into a container so the container can access or share that host-level data
+2. Persistent? ⚠ Persistent as long as instance runs
+3. Shared Across Tasks? ❌ No
+4. Can Share Data Between Containers in Same Task? ✅ Yes
+5. Mount Required? ✅ Yes
+
+Docker Volumes
+1. What is it? Named Docker-managed volumes stored under /var/lib/docker/volumes on the EC2 instance storage, managed by Docker and usable across containers on the same host
+2. Persistent? ⚠ Persistent as long as instance runs
+3. Shared Across Tasks? ❌ No
+4. Can Share Data Between Containers in Same Task? ✅ Yes
+5. Mount Required? ✅ Yes
+
+Amazon EBS
+1. What is it? Block storage volumes that can be attached to EC2 instances
+2. Persistent? ✅ Yes (if volume lifecycle managed)
+3. Shared Across Tasks? ❌ No
+4. Can Share Data Between Containers in Same Task? ✅ Yes (if mounted in both containers)
+5. Mount Required? ✅ Only if sharing between containers
+
+Amazon EFS
+1. What is it? Managed network file system accessible from multiple EC2 instances and tasks
+2. Persistent? ✅ Yes
+3. Shared Across Tasks? ✅ Yes
+4. Can Share Data Between Containers in Same Task? ✅ Yes
+5. Mount Required? ✅ Yes
+
+Amazon FSx
+1. What is it? Fully managed file system (FSx for Windows File Server, FSx for Lustre)
+2. Persistent? ✅ Yes
+3. Shared Across Tasks? ✅ Yes
+4. Can Share Data Between Containers in Same Task? ✅ Yes (if mounted in all containers)
+5. Mount Required? ✅ Yes
+
+🔎 Summary
+1. Fargate supports:
+   - Ephemeral Storage (default)
+   - Bind Mount (Ephemeral)
+   - Amazon EFS
+   - Amazon EBS (via CLI only)
+2. EC2 supports:
+   - EC2 Instance Storage
+   - Bind Mount (Host Path)
+   - Docker Volumes
+   - Amazon EBS
+   - Amazon EFS
+   - Amazon FSx
+
+✅ Step 6: Create ECS Task Definition
+
+	Introduction
+	1. In this session, we are going to create an ECS Fargate Task Definition for our web application
+	2. Our application stores data in Amazon S3, so before creating the task definition, we must first set up two key resources.
+	3. S3 Bucket: This will act as the storage location for our application’s data.
+	4. ECS Task Role: This is an IAM role that our ECS task will assume at runtime to get permission to perform specific AWS actions (in our case, putting data into the S3 bucket)
+	5. So, before moving ahead with the task definition, we will first:
+	   1. Create an S3 bucket for storing application data
+	   2. Create an ECS Task Role with the required permissions for our bucket
+
+	Create an S3 Bucket for Storing Application Data
+	1. Open the AWS Management Console and go to Amazon S3
+	2. Select AWS Region:
+	   1. Choose the region where you plan to run your ECS task
+	   2. Note:
+		  1. Whatever region you select here, write it down
+		  2. We will need this value later when passing it as an environment variable in the task definition
+	3. Click Create bucket
+	4. Bucket name:
+	   1. Enter a unique name
+	   2. Note:
+		  1. The bucket name must be globally unique
+		  2. You can choose any name you like, but write it down in a notepad because we will need it later when passing it as an environment variable in the task definition
+	5. Click Create bucket
+	   Select the same region where you plan to run your ECS task
+
+	✅ Result: You now have a dedicated S3 bucket where your application can store data, and you’ve noted both the region and bucket name for later use.
+
+	Create an ECS Task Role with S3 Permissions
+	1. Open the IAM Console
+	   1. Go to AWS Management Console → IAM
+	   2. From the left menu, click Roles
+	   3. Click Create role
+	2. Select Trusted Entity
+	   1. Trusted entity type: Choose AWS Service
+	   2. Use case: Select Elastic Container Service
+	   3. Select trusted entity type: Choose Elastic Container Service Task
+	   4. Click Next.
+	3. Attach S3 Full Access Policy
+	   1. In the policy list, search for AmazonS3FullAccess.
+	   2. Select the checkbox next to it
+	   3. Click Next
+	   4. Note:
+		  1. We are giving full S3 access here to make the setup simple for testing
+		  2. In production, you should create a custom policy that grants access only to the specific bucket your application needs
+	4. Name & Create Role
+	   1. Role name: ecsTaskRole-myweb
+	   2. Click Create role
+	   3. Note:
+		  1. Write it down Role Name
+		  2. We have to use this during task definition creation
+
+	✅ Result: You now have an ECS Task Role with full S3 access (for testing). The application running in ECS will use this role to access S3 without storing AWS credentials inside the container
+
+	Create the Fargate Task Definition
+	1. Open ECS → Task definitions → Create new task definition
+	2. Family name: My-Web-App (any name is fine)
+	3. Launch type compatibility: FARGATE
+	4. Operating system/CPU arch: Linux / x86_64
+	5. Network mode: awsvpc (required by Fargate)
+	6. CPU & Memory:
+	   1. CPU: 1 vCPU
+	   2. Memory: 2 GB
+	7. Task role: select ecsTaskRole-myweb (This is the role you created with S3 access.)
+	8. Task execution role:
+	   1. In the dropdown, choose Create new role
+	   2. AWS will automatically create a role named ecsTaskExecutionRole with the required AmazonECSTaskExecutionRolePolicy
+	   3. This role is used for pulling the container image, sending logs to CloudWatch, and fetching secrets at startup — not for S3 access
+	9. Add container:
+	   1. Container name: web
+	   2. Image: your ECR image
+	   3. Port mappings: container port 80
+	   4. Environment variables:
+		  1. S3_BUCKET: <your-bucket-name> (the unique name you noted in Step 1)
+		  2. AWS_REGION: <your-region> (the region you noted in Step 1)
+	10. Ephemeral storage: keep default 20 GiB
+	11. Click Create
+
+	✅ Result: Your Fargate Task Definition is registered and ready to run
+
+✅ Step 7: Run ECS Task for Testing
+
+	1. **Task definition family**
+	   A Task Definition Family is the name you give when you first create a task definition in ECS
+
+	2. **Task definition revision**
+	   Every time you update that task definition, ECS creates a new revision under the same family name
+
+	3. **Desired tasks**
+	   1. Define how many task instances should be launched
+	   2. Spread tasks across subnets in different AZs to survive AZ outages or capacity issue
+	   3. Faster batch/queue processing: More parallel workers clear jobs faster.
+
+	4. **Task group**
+	   1. EC2 launch type: Task group + placement strategy can control task distribution
+	   2. Fargate launch type: Task group is informational only, no effect on task placement
+
+	5. **Capacity provider strategy**
+	   1. A Capacity Provider tells ECS where and how to run your tasks
+	   2. It’s a set of rules that tells ECS:
+		  1. Which capacity providers to use
+		  2. How many tasks to run on each provider
+		  3. Whether to guarantee a minimum on one provider
+	   3. You can set it at:
+		  1. Cluster level
+		  2. Run Task / Service level
+	   4. **base**: Minimum number of tasks that must go to a specific provider first
+	   5. **weight**: How to spread the rest of the tasks across providers proportionally
+	   6. **Example**:
+		  1. You want to run 10 tasks (same task definition, just 10 copies)
+		  2. Capacity provider strategy:
+			 1. FARGATE → base = 2, weight = 1
+			 2. FARGATE_SPOT → base = 0, weight = 3
+		  3. How ECS will place tasks:
+			 1. First, ECS will put 2 tasks on FARGATE because base says “at least 2 here”
+			 2. Now 8 tasks are left
+			 3. ECS will divide these 8 based on the weight:
+				1. Weight total = 1 (FARGATE) + 3 (FARGATE_SPOT) = 4 parts
+				2. FARGATE gets 1 part → 1/4 of 8 = 2 tasks
+				3. FARGATE_SPOT gets 3 parts → 3/4 of 8 = 6 tasks
+			 4. Final result:
+				1. FARGATE → 2 (base) + 2 (weight) = 4 tasks
+				2. FARGATE_SPOT → 6 tasks
+
+✅ Step 8: Create ECS Service (with Load Balancer)
+
+	1. **Introduction**
+	   1. When you run a task, ECS simply starts the container and does nothing after that.
+	   2. If the task crashes, ECS will not restart it
+	   3. If you need multiple copies, you have to manually run them
+	   4. An **ECS Service** is basically a controller for your tasks:
+		   1. Automatically restarts the task if it fails
+		   2. Maintains a desired number of tasks
+		   3. Supports auto scaling
+		   4. Supports load balancer integration
+		   5. Good for long-running apps & microservices
+	   5. 🧠 **Why Service is Better (in simple words)**:
+		   1. If your task stops for any reason, Service will automatically launch a new one
+		   2. You can say “I want 3 copies”, and Service will keep exactly 3 running
+		   3. You can link it to a Load Balancer so traffic is distributed automatically
+		   4. You can even configure Scaling rules (increase/decrease number of tasks based on CPU usage)
+	   6. So basically:
+		   1. **Task** = Run it once and forget
+		   2. **Service** = Run it continuously and let ECS manage it for me
+
+	2. **Deployment Configuration Options**
+	   1. **Replica**: You specify the number of tasks you want (e.g., 2, 5, etc.) and ECS keeps exactly that many running
+	   2. **Daemon**: ECS automatically runs ONE task per EC2 instance (similar to Kubernetes DaemonSet)
+
+	3. **Availability Zone re-balancing**
+	   1. When your service is running in more than one Availability Zone, ECS tries to keep equal number of tasks in each AZ
+	   2. **Example**:
+		   1. 2 tasks in ap-south-1a
+		   2. 2 tasks in ap-south-1b
+		   3. Now imagine ap-south-1b goes down → ECS must keep 4 running tasks, so it puts all 4 tasks in ap-south-1a (because that’s the only healthy AZ)
+		   4. Later, ap-south-1b becomes healthy again
+			  👉 At this point, Availability Zone re-balancing automatically starts moving tasks back so that both AZs become balanced again (2-2)
+
+	4. **Health Check Grace Period?**
+	   1. It is the amount of time (in seconds) that ECS will wait before starting health checks on a newly launched task
+	   2. During this “grace period”, ECS assumes the task is healthy, even if the health check fails
+	   3. ✅ **Example**:
+		   1. Health check grace period = 60 seconds
+		   2. ECS launches a new task
+		   3. First 60 seconds: ECS will not perform health checks
+		   4. After 60 seconds, ECS will start checking health normally
+
+	5. **Deployment options**
+	   1. How you want to deliver new versions of the service
+	   2. **Example**: You already have a service running version v1 of your app → now you want to update it to v2 → that “update process” is called deployment update
+	   3. **Deployment strategy**:
+		   1. A deployment controller defines how ECS will perform that update
+		   2. In simple words → it answers this question: *When I deploy a new version, how should ECS replace the old tasks?*
+		   3. ECS gives you two choices for this:
+			   1. 🔄 **Option 1: Rolling Update (Default)**
+			   2. 🔵🟢 **Option 2: Blue/Green Deployment (using CodeDeploy)**
+
+	6. **🔄 Option 1: Rolling Update (Default)**
+	   1. **Introduction**
+		   1. ECS updates the tasks one-by-one
+		   2. It starts a new task, waits until it’s healthy, then stops one old task
+		   3. No separate environment is created
+		   4. 🟢 Simple and good for development/testing
+		   5. 🔴 If you use a low Min Running % or a low Max Running %, ECS might stop the old tasks before the new ones are ready — which can cause a short interruption
+	   2. **🔧 Min Running Tasks % (Minimum Healthy Percent)**: This tells ECS how many of your tasks must stay running during an update
+	   3. **🔧 Max Running Tasks % (Maximum Percent)**:
+		   1. This tells ECS how many tasks it is allowed to run temporarily during a rolling update
+		   2. It is based on your Desired Task Count (also called Replica count)
+	   4. ✅ **Rolling Update Example**:
+		   1. Replica / Desired Task Count: 4
+		   2. Min Running Tasks %: 100%
+		   3. Max Running Tasks %: 200%
+		   4. 🔁 **How Deployment Happens**:
+			   - **Start**:
+				   1. Old Tasks Running: 4
+				   2. New Tasks Started: 0
+				   3. Total Tasks: 4
+				   4. *Explanation: All 4 old tasks running (v1)*
+			   - **Step 1**:
+				   1. Old Tasks Running: 4
+				   2. New Tasks Started: 4
+				   3. Total Tasks: 8
+				   4. *Explanation: ECS starts 4 new tasks (v2) because Max = 200% allows up to 8*
+			   - **Step 2**:
+				   1. Old Tasks Running: 0
+				   2. New Tasks Started: 4
+				   3. Total Tasks: 4
+				   4. *Explanation: Once new tasks are healthy, ECS stops all 4 old tasks*
+		   5. 🧠 **In Simple Words**:
+			   1. ECS keeps all old 4 tasks running (because Min = 100%)
+			   2. → Starts 4 new tasks in parallel (because Max = 200%)
+			   3. → When the new version becomes healthy, it stops the old tasks
+			   4. 👉 This gives fast deployment with zero downtime.
+		   6. **Note**: Rolling Update can work without a load balancer as well — but if you have one, ECS will switch traffic automatically
+
+	7. **🔵🟢 Option 2: Blue/Green Deployment (using CodeDeploy)**
+	   1. **Introduction**
+		   1. ECS creates a new environment (Green) for the new version
+		   2. You can test it separately
+		   3. Once you are happy → ECS switches traffic from Blue (old) to Green (new)
+		   4. If something fails → ECS can rollback to the old version automatically
+		   5. 🟢 Zero downtime and safe for production
+		   6. 🔴 Slightly more setup (needs CodeDeploy and Load Balancer)
+	   2. **Bake Time**
+		   1. In a Blue/Green deployment, bake time is the waiting period after the Green (new) version becomes healthy but before traffic is switched
+		   2. Bake time allows testing before traffic is switched. During this time, both Blue (old) and Green (new) are running — so rollback is still possible
+		   3. Once traffic is switched, old tasks are stopped and rollback would require a new deployment
+	   3. **🔵🟢 Example – Blue/Green Deployment**
+		   1. **Current version running in production**:
+			   1. Blue environment → version v1
+			   2. Users are accessing this version through the Load Balancer
+		   2. **You deploy version v2 using Blue/Green deployment**:
+			   - **Step 1**:
+				   1. Blue (Old): v1 tasks running
+				   2. Green (New): v2 tasks are created (in parallel)
+				   3. Traffic: ✅ All traffic still going to Blue
+			   - **Step 2**:
+				   1. Blue (Old): v1 tasks still running
+				   2. Green (New): v2 tasks bake time (you test manually)
+				   3. Traffic: ✅ Traffic still on Blue
+			   - **Step 3**:
+				   1. Blue (Old): v1 tasks stopped
+				   2. Green (New): v2 tasks running only
+				   3. Traffic: Traffic is now switched to Green (new version)
+		   3. 🧠 **In Simple Words**:
+			   1. ECS creates a new copy (Green) of your application while the old one (Blue) is still running
+			   2. You test the new version during bake time
+			   3. If everything looks good, traffic is switched to the Green version
+			   4. If any issue is found before the switch, you can cancel and continue using the Blue version
+		   4. **Note**: Blue/Green requires a load balancer — because ECS needs it to switch traffic from the old version (Blue) to the new version (Green)
+
+	Full Stack ECS Deployment
