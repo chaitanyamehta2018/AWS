@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ECS Networking Modes - Comparisonia Theme</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #0a192f;
+      color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #ff7f11;
+      margin-bottom: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: #112240;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+    }
+
+    th, td {
+      padding: 12px 15px;
+      text-align: center;
+      border: 1px solid #1e3a5f;
+    }
+
+    th {
+      background-color: #ff7f11;
+      color: #0a192f;
+      font-size: 16px;
+    }
+
+    tr:nth-child(even) {
+      background-color: #162d4a;
+    }
+
+    tr:hover {
+      background-color: #23395d;
+      cursor: pointer;
+    }
+
+    td {
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 ECS Networking Modes - Comparison</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Networking Mode</th>
+        <th>Port Mapping Needed?</th>
+        <th>IP Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>awsvpc 🌐</td>
+        <td>❌ Not needed (you define container port directly)</td>
+        <td>Own private IP</td>
+      </tr>
+      <tr>
+        <td>bridge 🌉</td>
+        <td>✅ Yes (container port → host port mapping)</td>
+        <td>Shares host</td>
+      </tr>
+      <tr>
+        <td>host 🖥️</td>
+        <td>❌ No mapping — uses host ports directly</td>
+        <td>Shares host</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Placement Constraints - Comparisonia Theme</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #0a192f;
+      color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #ff7f11;
+      margin-bottom: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: #112240;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+    }
+
+    th, td {
+      padding: 12px 15px;
+      text-align: left;
+      border: 1px solid #1e3a5f;
+      vertical-align: top;
+    }
+
+    th {
+      background-color: #ff7f11;
+      color: #0a192f;
+      font-size: 16px;
+      text-align: center;
+    }
+
+    tr:nth-child(even) {
+      background-color: #162d4a;
+    }
+
+    tr:hover {
+      background-color: #23395d;
+      cursor: pointer;
+    }
+
+    td {
+      font-size: 14px;
+    }
+
+    .highlight {
+      color: #ff7f11;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 ECS Task Placement Constraints</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Criteria</th>
+        <th>memberOf 🟠</th>
+        <th>distinctInstance 🔵</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="highlight">Purpose</td>
+        <td>Run task only on EC2 instances matching a custom rule (CQL)</td>
+        <td>Ensure each task runs on a different EC2 instance</td>
+      </tr>
+      <tr>
+        <td class="highlight">Cluster Query Language (CQL) Expression Required</td>
+        <td>✅ Yes</td>
+        <td>❌ No</td>
+      </tr>
+      <tr>
+        <td class="highlight">Where to Configure</td>
+        <td>Task Definition, Service, Run Task</td>
+        <td>Service, Run Task (not in Task Definition)</td>
+      </tr>
+      <tr>
+        <td class="highlight">Example</td>
+        <td><code>attribute:ecs.instance-type =~ t3.*</code> → Runs only on t3 instances</td>
+        <td>No expression → ECS spreads tasks across separate EC2 hosts</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>
