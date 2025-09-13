@@ -1,0 +1,69 @@
+📌 Objective
+	Whenever a PNG file is uploaded to Amazon S3, an Amazon EventBridge rule triggers a Lambda function that automatically adds a tag Watermarked=ATS to the object.
+	
+🚀 Steps
+1. Create an S3 Bucket
+
+	Open S3 Console → Create bucket.
+	Enter a unique name, e.g., eventbridge-watermark-lab.
+	Leave default settings (keep block public access ON).
+	Click Create bucket.
+	
+2. Create a Lambda Function
+
+	Go to Lambda Console → Create function.
+	Choose:
+		Author from scratch
+		Function name: S3TagWatermark
+		Runtime: Python 3.9 (or latest available).
+	Click Create function.
+	Replace the default code with: LamdaCode.py
+	
+	Click Deploy.
+	Update Lambda permissions:
+		Go to Configuration → Permissions → Execution role → IAM console.
+		Attach policy: AmazonS3FullAccess (or create a custom policy with s3:PutObjectTagging).		
+	
+3. Create an EventBridge Rule
+	Go to EventBridge Console → Rules → Create rule.
+	Name: S3PNGUploadRule.
+	Event source: AWS events or EventBridge partner events.
+	Use this event pattern (replace bucket name if different):				
+		{
+		  "source": ["aws.s3"],
+		  "detail-type": ["Object Created"],
+		  "detail": {
+			"bucket": {
+			  "name": ["eventbridge-watermark-lab"]
+			}
+		  }
+		}	
+	For Target, choose Lambda function → S3TagWatermark.
+		Click Create rule.
+	
+4. Test the Setup
+
+	Upload a PNG file into your S3 bucket.
+	Open CloudWatch Logs → Log groups → /aws/lambda/S3TagWatermark → check the latest log stream.
+	You should see the event details printed.
+	Response should include "status": "tagged".
+	In the S3 Console:
+		Open your uploaded PNG → go to Properties → Tags.
+		You should see: Watermarked=ATS.
+	
+5. Monitor with CloudWatch Metrics (Optional)
+	Go to CloudWatch → Metrics → Events → By Rule Name.
+	Select S3PNGUploadRule.
+	Check metrics like:
+	InvocationAttempts
+	SuccessfulInvocationAttempts
+	
+🧹 Cleanup (Avoid Charges)
+	Delete EventBridge Rule
+		Go to EventBridge → Rules → Delete S3PNGUploadRule.
+	Delete Lambda Function
+		Go to Lambda → Delete S3TagWatermark.
+	Delete S3 Bucket
+		Empty the bucket → Delete it.
+	Delete CloudWatch Logs
+		Go to CloudWatch → Log groups → Delete /aws/lambda/S3TagWatermark.
